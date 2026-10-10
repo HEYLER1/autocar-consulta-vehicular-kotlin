@@ -4,6 +4,18 @@ Aplicación Android que centraliza el acceso a consultas vehiculares por placa y
 
 Es un prototipo en desarrollo para evaluar la eficiencia de acceso a información. No es una aplicación oficial de las entidades y no certifica la ausencia de multas, accidentes o cargas registrales.
 
+## Capturas de la aplicación
+
+Capturas reales del emulador Android, tomadas el 10 de octubre de 2026. `ABC-123` es una placa de ejemplo introducida para mostrar la interfaz; no se realizó una consulta con ella. Estas imágenes documentan las pantallas, no resultados oficiales ni mediciones del piloto.
+
+<p align="center">
+  <img src="docs/images/multas.png" width="250" alt="Directorio de multas agrupado por ámbito y ciudad">
+  <img src="docs/images/vehiculo.png" width="250" alt="Servicios del vehículo: revisión técnica MTC y SUNARP">
+  <img src="docs/images/seguros.png" width="250" alt="Acceso a seguros e historial SOAT mediante SBS">
+</p>
+
+De izquierda a derecha: **Multas y papeletas**, **Datos del vehículo** y **Seguros e historial**. Todas conservan el menú inferior para cambiar de sección.
+
 ## Funciones implementadas
 
 - Ingreso, normalización y validación de placas peruanas; historial local de placas recientes.
