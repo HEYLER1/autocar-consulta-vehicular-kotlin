@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="navy">#002B5C</color>
+    <color name="navy_dark">#001D3D</color>
+    <color name="blue">#002B5C</color>
+    <color name="blue_dark">#001D3D</color>
+    <color name="blue_soft">#E7EEF6</color>
+    <color name="brand_yellow">#FFD600</color>
+    <color name="brand_red">#C8102E</color>
+    <color name="green">#1E9E68</color>
+    <color name="green_soft">#E7F7EF</color>
+    <color name="text_primary">#1A1A2E</color>
+    <color name="text_secondary">#6B7280</color>
+    <color name="surface">#FFFFFF</color>
+    <color name="background">#F4F7F9</color>
+    <color name="divider">#E7EAF0</color>
+    <color name="white">#FFFFFFFF</color>
+    <color name="black">#FF000000</color>
+</resources>
