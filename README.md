@@ -54,6 +54,16 @@ Aunque el repositorio se llama `autocar-consulta-vehicular-kotlin`, las pantalla
 
 ## Ejecutar en Android Studio
 
+### Instalar el APK de prueba
+
+[Descargar AUTOCAR 1.0 con logo](https://github.com/HEYLER1/autocar-consulta-vehicular-kotlin/raw/refs/heads/main/dist/AUTOCAR-1.0.apk)
+
+APK de depuración firmado, generado el 12 de octubre de 2026. Requiere Android 14 (API 34) o superior. Android puede solicitar permiso para instalar aplicaciones desde el navegador o administrador de archivos. No es una versión de producción ni se publica en Google Play.
+
+La compilación `assembleDebug` y las dos pruebas unitarias finalizaron correctamente después de incorporar el nuevo icono. Esto no certifica las consultas de los portales externos.
+
+### Abrir y compilar el proyecto
+
 1. Clonar el repositorio y abrir su carpeta raíz en Android Studio.
 2. Instalar el SDK Android API 37 y configurar el JDK compatible con el Gradle del proyecto; en el entorno de desarrollo se utiliza el JDK incluido en Android Studio.
 3. Sincronizar Gradle. Se requiere conexión para descargar la distribución y las dependencias.
