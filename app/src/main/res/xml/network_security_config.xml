@@ -7,6 +7,7 @@
     </base-config>
     <domain-config cleartextTrafficPermitted="true">
         <domain includeSubdomains="false">www.munipiura.gob.pe</domain>
+        <domain includeSubdomains="false">www2.munipiura.gob.pe</domain>
         <domain includeSubdomains="false">consultas.municportillo.gob.pe</domain>
     </domain-config>
 </network-security-config>

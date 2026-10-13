@@ -12,6 +12,8 @@ import org.junit.Assert.*
 class ExampleUnitTest {
     @Test
     fun normalizesPeruvianPlate() {
+        assertEquals("XD4345", PlateUtils.normalize("xd4345"))
+        assertEquals("XD4345", PlateUtils.normalize("xd4-345"))
         assertEquals("ABC123", PlateUtils.normalize("abc-123"))
         assertEquals("ABC-123", PlateUtils.display("abc123"))
     }

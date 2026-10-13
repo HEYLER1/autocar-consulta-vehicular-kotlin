@@ -23,6 +23,9 @@
         <activity
             android:name=".WebViewActivity"
             android:exported="false" />
+        <activity android:name=".FinesBatchActivity" android:exported="false"
+            android:configChanges="orientation|screenSize|keyboardHidden" />
+        <activity android:name=".GeneralReportActivity" android:exported="false" />
 
         <activity
             android:name=".SunarpServicesActivity"

@@ -52,10 +52,15 @@ public class MainActivity extends AppCompatActivity {
     private View filterMunicipal;
     private String selectedCategory = CATEGORY_VEHICLE;
     private String sourceQuery = "";
+    private boolean showFinesDirectory;
+    private UnifiedQueryPanel inlineQuery;
+    private LinearLayout inlineQuerySlot;
+    private boolean queryRunning;
+    private Runnable refreshHomeSelection;
 
     private final List<OfficialSource> sources = Arrays.asList(
             new OfficialSource(CATEGORY_VEHICLE, "SUNARP", "Consulta y servicios registrales", "9 servicios", "https://consultavehicular.sunarp.gob.pe/consulta-vehicular/", "R"),
-            new OfficialSource(CATEGORY_VEHICLE, "Revisión técnica MTC", "Estado de la inspección vehicular", "Captcha", "https://portal.mtc.gob.pe/reportedgtt/form/frmconsultaplacaitv.aspx", "T"),
+            new OfficialSource(CATEGORY_VEHICLE, "Revisión técnica MTC", "Estado de la inspección vehicular", "Captcha", "https://rec.mtc.gob.pe/Citv/ArConsultaCitv", "T"),
             new OfficialSource(CATEGORY_INSURANCE, "SOAT · SBS", "Pólizas, uso declarado y accidentes", "Automática", "https://servicios.sbs.gob.pe/reportesoat/", "S"),
             new OfficialSource(CATEGORY_NATIONAL, "SUTRAN", "Récord de infracciones de transporte", "Captcha", "https://webexterno.sutran.gob.pe/WebExterno/Pages/frmRecordInfracciones.aspx", "S"),
             new OfficialSource(CATEGORY_MUNICIPAL, "ATU · Lima y Callao", "Actas y multas de transporte urbano", "Placa / acta", "https://pasarela.atu.gob.pe/", "A"),
@@ -66,7 +71,7 @@ public class MainActivity extends AppCompatActivity {
             new OfficialSource(CATEGORY_MUNICIPAL, "Chachapoyas", "Consulta municipal de papeletas", "Placa", "https://app.munichachapoyas.gob.pe/servicios/consulta_papeletas/app/papeletas.php", "C"),
             new OfficialSource(CATEGORY_MUNICIPAL, "Huánuco", "Papeletas de tránsito · enlace de Peruautos", "Portal", "https://www.munihuanuco.gob.pe/wp-content/servicios/transportes/gt_papeletas.php", "H"),
             new OfficialSource(CATEGORY_MUNICIPAL, "Pucallpa", "Consulta vehicular municipal · conexión HTTP", "HTTP", "http://consultas.municportillo.gob.pe:85/consultaVehiculo/consulta/", "P"),
-            new OfficialSource(CATEGORY_MUNICIPAL, "SAT Cajamarca", "Obligaciones y papeletas", "Portal", "https://www.satcajamarca.gob.pe/#/", "C"),
+            new OfficialSource(CATEGORY_MUNICIPAL, "SAT Cajamarca", "Récord de infracciones por placa", "Placa", "https://www.satcajamarca.gob.pe/consultas", "C"),
             new OfficialSource(CATEGORY_MUNICIPAL, "SATCH Chiclayo", "Récord de infracciones", "Directa", "https://virtualsatch.satch.gob.pe/virtualsatch/record_infracciones/buscar_placa_", "C"),
             new OfficialSource(CATEGORY_MUNICIPAL, "SAT Ica", "Papeletas de tránsito", "Directa", "https://m.satica.gob.pe/consultapapeletas_web.php", "I"),
             new OfficialSource(CATEGORY_MUNICIPAL, "SAT Lima", "Consulta de multas y papeletas por placa", "Placa", "https://www.sat.gob.pe/VirtualSAT/principal.aspx", "L"),
@@ -83,7 +88,8 @@ public class MainActivity extends AppCompatActivity {
         View mainRoot = findViewById(R.id.main_root);
         ViewCompat.setOnApplyWindowInsetsListener(mainRoot, (view, insets) -> {
             Insets bars = insets.getInsets(WindowInsetsCompat.Type.systemBars());
-            view.setPadding(0, bars.top, 0, bars.bottom);
+            int keyboard=insets.getInsets(WindowInsetsCompat.Type.ime()).bottom;
+            view.setPadding(0, bars.top, 0, Math.max(bars.bottom,keyboard));
             return insets;
         });
 
@@ -192,7 +198,11 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
-        root.findViewById(R.id.search_plate).setOnClickListener(view -> openMultipleCheck(plateInput));
+        com.google.android.material.button.MaterialButton homeConsult = root.findViewById(R.id.search_plate);
+        LinearLayout homeCard=(LinearLayout)homeConsult.getParent();
+        addInlineSourceSelection(homeCard,homeConsult,plateInput);
+        inlineQuerySlot=new LinearLayout(this);inlineQuerySlot.setOrientation(LinearLayout.VERTICAL);homeCard.addView(inlineQuerySlot,homeCard.indexOfChild(homeConsult)+1);
+        homeCard.addView(CurrencyConverter.buildView(this),homeCard.indexOfChild(homeConsult)+1);
         root.findViewById(R.id.quick_soat).setOnClickListener(view -> openDirectSource(plateInput, sources.get(2)));
         root.findViewById(R.id.quick_sutran).setOnClickListener(view -> openDirectSource(plateInput, sources.get(3)));
         root.findViewById(R.id.quick_mtc).setOnClickListener(view -> openDirectSource(plateInput, sources.get(1)));
@@ -268,6 +278,12 @@ public class MainActivity extends AppCompatActivity {
 
     private void renderSources() {
         sourceContainer.removeAllViews();
+        if (CATEGORY_MUNICIPAL.equals(selectedCategory)) {
+            TextView hint=new TextView(this);hint.setText("La consulta con selección de ciudades y PDF está en Inicio. Aquí puedes explorar las fuentes individuales.");hint.setTextSize(14);hint.setTextColor(Color.parseColor("#6B7280"));hint.setPadding(dp(4),dp(12),dp(4),dp(16));sourceContainer.addView(hint);
+            TextView directory=new TextView(this);directory.setText(showFinesDirectory?"Ocultar directorio de fuentes ↑":"Ver fuentes por ciudad ↓");directory.setTextSize(14);directory.setTextColor(Color.parseColor("#002B5C"));directory.setPadding(dp(4),dp(12),dp(4),dp(12));directory.setOnClickListener(v -> {showFinesDirectory=!showFinesDirectory;if(!showFinesDirectory){sourceQuery="";sourceSearch.setText("");}renderSources();});sourceContainer.addView(directory);
+            sourceSearch.setVisibility(showFinesDirectory?View.VISIBLE:View.GONE);
+            if(!showFinesDirectory)return;
+        }
         LayoutInflater inflater = LayoutInflater.from(this);
         String normalizedQuery = sourceQuery.toLowerCase();
         int visibleCount = 0;
@@ -356,6 +372,9 @@ public class MainActivity extends AppCompatActivity {
     private void openSource(OfficialSource source) {
         openedSources.add(source.title);
         renderSources();
+        if(CATEGORY_MUNICIPAL.equals(source.category)||CATEGORY_NATIONAL.equals(source.category)){
+            startFinesQuery(java.util.Collections.singletonList(source));return;
+        }
         if ("SUNARP".equals(source.title)) {
             Intent intent = new Intent(this, SunarpServicesActivity.class);
             intent.putExtra(SunarpServicesActivity.EXTRA_PLATE, currentPlate);
@@ -368,6 +387,80 @@ public class MainActivity extends AppCompatActivity {
         intent.putExtra(WebViewActivity.EXTRA_PLATE, currentPlate);
         startActivity(intent);
     }
+
+    private void addInlineSourceSelection(LinearLayout parent,com.google.android.material.button.MaterialButton consult,EditText plateInput){
+        java.util.ArrayList<OfficialSource> options=new java.util.ArrayList<>();
+        options.addAll(sources);
+        options.sort(java.util.Comparator.comparing(s -> s.title));
+        java.util.Set<String> selected=new java.util.HashSet<>(preferences.getStringSet("selected_fines_sources",java.util.Collections.emptySet()));
+        if(!preferences.getBoolean("priority_defaults_v1",false)){
+            for(OfficialSource source:options)if(priorityIndex(source)>=0)selected.add(source.url);
+            preferences.edit().putBoolean("priority_defaults_v1",true).putStringSet("selected_fines_sources",new java.util.HashSet<>(selected)).apply();
+        }
+        LinearLayout panel=new LinearLayout(this);panel.setOrientation(LinearLayout.VERTICAL);panel.setPadding(0,dp(12),0,dp(4));parent.addView(panel,parent.indexOfChild(consult));
+        LinearLayout heading=new LinearLayout(this);heading.setGravity(android.view.Gravity.CENTER_VERTICAL);panel.addView(heading);
+        TextView title=new TextView(this);title.setText("Consultas");title.setTextSize(16);title.setTypeface(android.graphics.Typeface.DEFAULT,android.graphics.Typeface.BOLD);title.setTextColor(Color.parseColor("#002B5C"));heading.addView(title,new LinearLayout.LayoutParams(0,dp(36),1));
+        TextView count=new TextView(this);count.setTextSize(12);count.setTextColor(Color.parseColor("#6B7280"));heading.addView(count);
+        Runnable refresh=()->{int n=0;for(OfficialSource s:options)if(selected.contains(s.url))n++;count.setText(n+" seleccionadas");consult.setText(queryRunning?"Cancelar":n==0?"Consultar":"Consultar ("+n+")");consult.setEnabled(queryRunning||n>0);preferences.edit().putStringSet("selected_fines_sources",new java.util.HashSet<>(selected)).apply();};
+        refreshHomeSelection=refresh;
+        TextView recommendation=new TextView(this);recommendation.setTextSize(12);recommendation.setTextColor(Color.parseColor("#6B7280"));recommendation.setPadding(0,0,0,dp(6));panel.addView(recommendation);
+        LinearLayout grid=new LinearLayout(this);grid.setOrientation(LinearLayout.VERTICAL);panel.addView(grid);
+        java.util.Map<OfficialSource,View> chips=new java.util.HashMap<>();
+        for(int i=0;i<options.size();i+=3){
+            LinearLayout row=new LinearLayout(this);row.setOrientation(LinearLayout.HORIZONTAL);grid.addView(row);
+            for(int j=i;j<Math.min(i+3,options.size());j++){
+                OfficialSource source=options.get(j);com.google.android.material.button.MaterialButton chip=new com.google.android.material.button.MaterialButton(this);
+                chips.put(source,chip);
+                String label=source.title.startsWith("SOAT")?"SOAT":source.title.contains("MTC")?"MTC":source.title.startsWith("ATU")?"ATU":source.title.startsWith("Callao")?"Callao":source.title.replace("SATCH ","").replace("SATT ","").replace("SAT ","");
+                chip.setText(label);chip.setAllCaps(false);chip.setTextSize(13);chip.setCheckable(true);chip.setChecked(selected.contains(source.url));chip.setCornerRadius(dp(10));chip.setMinHeight(dp(48));chip.setMinimumWidth(0);chip.setMaxLines(2);chip.setPadding(dp(4),0,dp(4),0);chip.setInsetTop(dp(4));chip.setInsetBottom(dp(4));
+                LinearLayout.LayoutParams cell=new LinearLayout.LayoutParams(0,dp(48),1);if(j>i)cell.leftMargin=dp(4);row.addView(chip,cell);
+                Runnable style=()->{boolean on=selected.contains(source.url);chip.setChecked(on);chip.setStrokeWidth(dp(1));chip.setStrokeColor(android.content.res.ColorStateList.valueOf(Color.parseColor(on?"#002B5C":"#DFE5ED")));chip.setBackgroundTintList(android.content.res.ColorStateList.valueOf(Color.parseColor(on?"#002B5C":"#F5F7FA")));chip.setTextColor(Color.parseColor(on?"#FFFFFF":"#002B5C"));chip.setIconResource(0);chip.setContentDescription(source.title+(on?", seleccionada":", no seleccionada"));};
+                style.run();chip.setOnClickListener(v->{if(selected.contains(source.url))selected.remove(source.url);else selected.add(source.url);style.run();refresh.run();});
+            }
+            for(int empty=Math.min(3,options.size()-i);empty<3;empty++){View spacer=new View(this);LinearLayout.LayoutParams cell=new LinearLayout.LayoutParams(0,dp(48),1);cell.leftMargin=dp(4);row.addView(spacer,cell);}
+        }
+        Runnable reorder=()->{
+            String region=PlateRegion.region(plateInput.getText().toString());
+            boolean any=false;for(OfficialSource s:options)if(PlateRegion.recommended(plateInput.getText().toString(),s.title))any=true;
+            recommendation.setText(region.isEmpty()?"":any?"Sugeridas · "+region:"Zona · "+region);recommendation.setVisibility(region.isEmpty()?View.GONE:View.VISIBLE);recommendation.setContentDescription("Zona registral orientativa: "+region+". El vehículo puede tener multas en otras ciudades.");recommendation.setOnClickListener(v->new androidx.appcompat.app.AlertDialog.Builder(this).setTitle("Recomendación por placa").setMessage("El prefijo sólo orienta sobre la zona registral. No confirma dónde circula el vehículo: también puede tener multas en otras ciudades.").setPositiveButton("Entendido",null).show());
+            java.util.ArrayList<OfficialSource> ordered=new java.util.ArrayList<>(options);ordered.sort(java.util.Comparator.comparingInt((OfficialSource s)->priorityIndex(s)>=0?priorityIndex(s):PlateRegion.recommended(plateInput.getText().toString(),s.title)?4:5).thenComparing(s->s.title));
+            for(View chip:chips.values())if(chip.getParent()!=null)((android.view.ViewGroup)chip.getParent()).removeView(chip);grid.removeAllViews();
+            if(recommendation.getParent()!=null)((android.view.ViewGroup)recommendation.getParent()).removeView(recommendation);
+            LinearLayout row=null;
+            for(int i=0;i<ordered.size();i++){
+                if(i==4){View divider=new View(this);divider.setBackgroundColor(Color.parseColor("#CBD5E1"));LinearLayout.LayoutParams line=new LinearLayout.LayoutParams(-1,dp(1));line.topMargin=dp(8);line.bottomMargin=dp(8);grid.addView(divider,line);grid.addView(recommendation);}
+                int column=i<4?i%2:(i-4)%3;
+                if(column==0){row=new LinearLayout(this);grid.addView(row);}
+                OfficialSource s=ordered.get(i);View chip=chips.get(s);LinearLayout.LayoutParams cell=new LinearLayout.LayoutParams(0,dp(48),1);if(column>0)cell.leftMargin=dp(4);row.addView(chip,cell);chip.setContentDescription(s.title+(PlateRegion.recommended(plateInput.getText().toString(),s.title)?", sugerida por placa":"")+(selected.contains(s.url)?", seleccionada":", no seleccionada"));
+            }
+            if(row!=null)for(int i=(ordered.size()-4)%3;i>0&&i<3;i++){LinearLayout.LayoutParams cell=new LinearLayout.LayoutParams(0,dp(48),1);cell.leftMargin=dp(4);row.addView(new View(this),cell);}
+        };
+        plateInput.addTextChangedListener(new SimpleTextWatcher(){@Override public void afterTextChanged(Editable e){reorder.run();}});reorder.run();
+        refresh.run();consult.setOnClickListener(v->{if(queryRunning){cancelActiveQuery();return;}java.util.ArrayList<OfficialSource> chosen=new java.util.ArrayList<>();for(OfficialSource s:options)if(selected.contains(s.url))chosen.add(s);if(!chosen.isEmpty()&&preparePlate(plateInput))startFinesQuery(chosen);});
+    }
+
+    private void startFinesQuery(List<OfficialSource> selected){
+        if(queryRunning)return;
+        if(!PlateUtils.isValidPeruvianPlate(currentPlate)){
+            EditText input=new EditText(this);input.setHint("Placa, por ejemplo A4D234");input.setSingleLine(true);input.setInputType(android.text.InputType.TYPE_CLASS_TEXT|android.text.InputType.TYPE_TEXT_FLAG_CAP_CHARACTERS);input.setPadding(dp(24),dp(12),dp(24),dp(12));
+            androidx.appcompat.app.AlertDialog dialog=new androidx.appcompat.app.AlertDialog.Builder(this).setTitle("Consultar multas").setView(input).setPositiveButton("Consultar",null).setNegativeButton("Cancelar",null).create();
+            dialog.setOnShowListener(ignored -> dialog.getButton(-1).setOnClickListener(v -> {String plate=PlateUtils.normalize(input.getText().toString());if(!PlateUtils.isValidPeruvianPlate(plate)){input.setError("Ingresa una placa de 6 caracteres");return;}currentPlate=plate;dialog.dismiss();startFinesQuery(selected);}));dialog.show();return;
+        }
+        EditText homeInput=findViewById(R.id.plate_input);if(homeInput!=null){homeInput.setText(PlateUtils.display(currentPlate));preparePlate(homeInput);}
+        java.util.ArrayList<String> names=new java.util.ArrayList<>(),urls=new java.util.ArrayList<>();for(OfficialSource s:selected){names.add(s.title);urls.add(s.url);}
+        if(inlineQuery!=null)inlineQuery.dispose();inlineQuerySlot.removeAllViews();
+        Intent intent=new Intent().putExtra("plate",PlateUtils.normalize(currentPlate)).putExtra("names",names.toArray(new String[0])).putExtra("urls",urls.toArray(new String[0]));
+        queryRunning=true;homeInput.setEnabled(false);refreshHomeSelection.run();
+        inlineQuery=new UnifiedQueryPanel(this,intent,this::cancelActiveQuery);
+        inlineQuery.setCompletionListener(()->{queryRunning=false;homeInput.setEnabled(true);refreshHomeSelection.run();});inlineQuery.start();inlineQuerySlot.addView(inlineQuery.view(),new LinearLayout.LayoutParams(-1,-2));
+        ((com.google.android.material.bottomnavigation.BottomNavigationView)findViewById(R.id.bottom_navigation)).setSelectedItemId(R.id.nav_home);
+        inlineQuerySlot.post(()->{android.widget.ScrollView scroll=(android.widget.ScrollView)((FrameLayout)findViewById(R.id.content_container)).getChildAt(0);android.graphics.Rect rect=new android.graphics.Rect();inlineQuerySlot.getDrawingRect(rect);scroll.offsetDescendantRectToMyCoords(inlineQuerySlot,rect);scroll.smoothScrollTo(0,rect.top);});
+    }
+
+    private int priorityIndex(OfficialSource s){return s.title.equals("SUNARP")?0:s.title.startsWith("SOAT")?1:s.title.equals("SUTRAN")?2:s.title.contains("MTC")?3:-1;}
+    private void cancelActiveQuery(){if(inlineQuery!=null){inlineQuery.dispose();inlineQuery=null;}inlineQuerySlot.removeAllViews();queryRunning=false;EditText input=findViewById(R.id.plate_input);if(input!=null)input.setEnabled(true);if(refreshHomeSelection!=null)refreshHomeSelection.run();}
+    @Override protected void onDestroy(){if(inlineQuery!=null)inlineQuery.dispose();super.onDestroy();}
+    private String priorityName(OfficialSource s){return new String[]{"SUNARP","SOAT","SUTRAN","MTC"}[priorityIndex(s)];}
 
     private void styleStatus(TextView view, boolean opened) {
         GradientDrawable background = new GradientDrawable();

@@ -6,22 +6,28 @@ Es un prototipo en desarrollo para evaluar la eficiencia de acceso a informació
 
 ## Capturas de la aplicación
 
-Capturas reales del emulador Android, tomadas el 10 de octubre de 2026. `ABC-123` es una placa de ejemplo introducida para mostrar la interfaz; no se realizó una consulta con ella. Estas imágenes documentan las pantallas, no resultados oficiales ni mediciones del piloto.
+Capturas de la versión actual en el emulador Android, tomadas el 13 de octubre de 2026. Inicio utiliza `ABC-123` como ejemplo, sin consultar esa placa. El informe muestra **datos ficticios de una prueba de interfaz**, no resultados oficiales ni mediciones del piloto. No se publican propietarios, DNI ni resultados personales.
 
 <p align="center">
-  <img src="docs/images/multas.png" width="250" alt="Directorio de multas agrupado por ámbito y ciudad">
-  <img src="docs/images/vehiculo.png" width="250" alt="Servicios del vehículo: revisión técnica MTC y SUNARP">
-  <img src="docs/images/seguros.png" width="250" alt="Acceso a seguros e historial SOAT mediante SBS">
+  <img src="docs/images/inicio-actual.png" width="290" alt="Inicio con fuentes prioritarias, ciudades seleccionables y conversor compacto">
+  <img src="docs/images/informe-general.png" width="290" alt="Informe general a pantalla completa con datos ficticios para comprobar el diseño">
 </p>
 
-De izquierda a derecha: **Multas y papeletas**, **Datos del vehículo** y **Seguros e historial**. Todas conservan el menú inferior para cambiar de sección.
+De izquierda a derecha: **Inicio** e **Informe general**. La consulta y los captchas permanecen en Inicio; «Ver resultados», debajo del progreso, abre el informe a pantalla completa.
 
 ## Funciones implementadas
 
 - Ingreso, normalización y validación de placas peruanas; historial local de placas recientes.
 - Navegación inferior: Inicio, Multas, Vehículo y Seguros.
 - Directorio de fuentes nacionales y municipales, con consultas abiertas en WebView y opción de abrir el navegador externo.
-- Consulta conjunta de SUNARP, SBS/SOAT, SUTRAN y MTC, con estados individuales y resultados parciales.
+- SUNARP, SOAT/SBS, SUTRAN y MTC preseleccionados y separados de las ciudades; el usuario puede desmarcarlos. Se ejecutan únicamente las fuentes seleccionadas.
+- El mismo botón alterna entre **Consultar** y **Cancelar**, impidiendo iniciar una segunda consulta mientras la primera sigue activa.
+- Porcentaje por fuentes terminadas, con datos recibidos, errores y verificaciones pendientes diferenciados.
+- Captchas compactos y ocultos hasta abrir «Verificar»; las sesiones no se recargan al enviar códigos.
+- Recomendaciones orientativas por prefijo de placa: las fuentes locales aparecen primero después de las prioritarias, sin seleccionarse automáticamente. La zona registral no determina dónde puede haber multas.
+- Conversor de soles y dólares visible en Inicio. Utiliza una tasa diaria referencial de ExchangeRate-API; no es una cotización bancaria en tiempo real. El monto ingresado no se envía a la API.
+- Informe general a pantalla completa, agrupado en vehículo, seguro, revisión técnica y multas, con el detalle extraído completo desplegable.
+- Flujo conjunto de multas por placa, con adaptadores por fuente, verificaciones agrupadas e informe PDF que se actualiza con los datos recibidos y los estados pendientes.
 - Pantalla de verificación para introducir manualmente los códigos de seguridad de SUTRAN y MTC, conservando la sesión de cada consulta.
 - Resumen de pólizas reportadas por SBS, vigencias, uso declarado e información de siniestralidad disponible.
 - Generación y compartición de un informe PDF; puede adjuntar la imagen oficial recibida de SUNARP.
@@ -30,7 +36,9 @@ Los captchas se completan por el usuario: no se implementa su evasión. El recon
 
 ## Alcance y limitaciones
 
-La consulta conjunta no incluye todavía la recopilación automática de todas las multas municipales. El directorio municipal facilita el acceso a cada portal, pero no consolida sus papeletas en el PDF.
+Inicio inicia las consultas seleccionadas y reúne el detalle extraído en un PDF. Las fuentes prioritarias reutilizan el motor anterior; las municipales conservan adaptadores propios. La automatización depende del formulario y de la disponibilidad de cada fuente: no todas pueden completarse sólo con una placa. El informe identifica consultas incompletas, errores y verificaciones pendientes; no debe presentarse como cobertura municipal total. Véase la [revisión por fuente](docs/verificacion_fuentes_2026-10-13.md).
+
+El informe a pantalla completa es una captura del estado al abrirlo: si quedan consultas pendientes, se vuelve a Inicio y se abre de nuevo para obtener un informe actualizado. El PDF asociado conserva ese estado.
 
 La disponibilidad depende de los servicios externos, sus certificados, formularios y controles de seguridad. Un portal accesible por HTTP no demuestra que una consulta por placa funcione de principio a fin. Un fallo, una consulta pendiente o un captcha sin resolver nunca deben interpretarse como cero multas.
 
@@ -58,9 +66,9 @@ Aunque el repositorio se llama `autocar-consulta-vehicular-kotlin`, las pantalla
 
 [Descargar AUTOCAR 1.0 con logo](https://github.com/HEYLER1/autocar-consulta-vehicular-kotlin/raw/refs/heads/main/dist/AUTOCAR-1.0.apk)
 
-APK de depuración firmado, generado el 12 de octubre de 2026. Requiere Android 14 (API 34) o superior. Android puede solicitar permiso para instalar aplicaciones desde el navegador o administrador de archivos. No es una versión de producción ni se publica en Google Play.
+APK de depuración firmado, generado el 13 de octubre de 2026 y guardado en `dist/AUTOCAR-1.0.apk`. Requiere Android 14 (API 34) o superior. Android puede solicitar permiso para instalar aplicaciones desde el navegador o administrador de archivos. No es una versión de producción ni se publica en Google Play.
 
-La compilación `assembleDebug` y las dos pruebas unitarias finalizaron correctamente después de incorporar el nuevo icono. Esto no certifica las consultas de los portales externos.
+La compilación, las pruebas unitarias y lint se verifican antes de publicar. Las pruebas instrumentadas comprueban selección, cancelación, progreso, captchas con formularios ficticios y renderizado del informe; no certifican todas las consultas reales de los portales externos.
 
 ### Abrir y compilar el proyecto
 
@@ -94,7 +102,11 @@ Las evidencias técnicas y sus límites se documentan en [Verificación técnica
 | Placas y validación | [PlateUtils.java](app/src/main/java/com/example/app_autocar/PlateUtils.java), [pruebas unitarias](app/src/test/java/com/example/app_autocar/ExampleUnitTest.kt) |
 | Menú y directorio | [MainActivity.java](app/src/main/java/com/example/app_autocar/MainActivity.java), [menú inferior](app/src/main/res/menu/main_navigation.xml) |
 | Portales y navegación | [WebViewActivity.java](app/src/main/java/com/example/app_autocar/WebViewActivity.java) |
-| Consulta conjunta, verificación e informe PDF | [MultiCheckActivity.java](app/src/main/java/com/example/app_autocar/MultiCheckActivity.java) |
+| Motor de las cuatro fuentes prioritarias | [PriorityQueryEngine.java](app/src/main/java/com/example/app_autocar/PriorityQueryEngine.java) |
+| Consulta integrada, progreso y captchas | [UnifiedQueryPanel.java](app/src/main/java/com/example/app_autocar/UnifiedQueryPanel.java), [pruebas instrumentadas](app/src/androidTest/java/com/example/app_autocar/FinesAutomationTest.kt) |
+| Adaptadores municipales y PDF | [FinesPortalAdapter.java](app/src/main/java/com/example/app_autocar/FinesPortalAdapter.java), [FinesPdfReport.java](app/src/main/java/com/example/app_autocar/FinesPdfReport.java) |
+| Informe general | [GeneralVehicleReport.java](app/src/main/java/com/example/app_autocar/GeneralVehicleReport.java), [GeneralReportActivity.java](app/src/main/java/com/example/app_autocar/GeneralReportActivity.java) |
+| Conversor y recomendaciones | [CurrencyConverter.java](app/src/main/java/com/example/app_autocar/CurrencyConverter.java), [PlateRegion.java](app/src/main/java/com/example/app_autocar/PlateRegion.java) |
 | Restricciones de red | [network_security_config.xml](app/src/main/res/xml/network_security_config.xml) |
 
 La presencia de código, una compilación exitosa y las pruebas unitarias no equivalen a una validación completa de los portales ni del contenido del PDF.

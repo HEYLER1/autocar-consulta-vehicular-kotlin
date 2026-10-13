@@ -70,6 +70,14 @@ public class SunarpServicesActivity extends AppCompatActivity {
         findViewById(R.id.sunarp_primary).setOnClickListener(view -> open(CONSULTA));
 
         fill(findViewById(R.id.sunarp_documents), DOCUMENTS);
+        android.widget.Button identitySettings = new android.widget.Button(this);
+        identitySettings.setText("Cambiar / eliminar datos de autorrelleno");
+        identitySettings.setOnClickListener(v -> new androidx.appcompat.app.AlertDialog.Builder(this)
+                .setTitle("Datos locales de SUNARP").setMessage("Puedes eliminar la identidad guardada o reemplazarla. No se envía a otras fuentes.")
+                .setPositiveButton("Cambiar", (d,w) -> requestIdentity(DOCUMENTS[0]))
+                .setNegativeButton("Eliminar", (d,w) -> getSharedPreferences("sunarp_identity", MODE_PRIVATE).edit().clear().apply())
+                .setNeutralButton("Cancelar", null).show());
+        ((LinearLayout)findViewById(R.id.sunarp_documents)).addView(identitySettings);
         fill(findViewById(R.id.sunarp_protection), PROTECTION);
         fill(findViewById(R.id.sunarp_procedures), PROCEDURES);
     }
@@ -98,11 +106,46 @@ public class SunarpServicesActivity extends AppCompatActivity {
     }
 
     private void open(Service service) {
+        if (service.url.contains("conoce-aqui.sunarp.gob.pe")
+                && !getSharedPreferences("sunarp_identity", MODE_PRIVATE).contains("dni")) {
+            requestIdentity(service);
+            return;
+        }
         Intent intent = new Intent(this, WebViewActivity.class);
         intent.putExtra(WebViewActivity.EXTRA_TITLE, service.title);
         intent.putExtra(WebViewActivity.EXTRA_URL, service.url);
         intent.putExtra(WebViewActivity.EXTRA_PLATE, plate);
         startActivity(intent);
+    }
+
+    private void requestIdentity(Service service) {
+        LinearLayout fields = new LinearLayout(this);
+        fields.setOrientation(LinearLayout.VERTICAL);
+        fields.setPadding(dp(24), dp(8), dp(24), dp(8));
+        android.widget.EditText dni = new android.widget.EditText(this);
+        dni.setHint("DNI (8 dígitos)"); dni.setInputType(2);
+        android.widget.EditText date = new android.widget.EditText(this);
+        date.setHint("Fecha de emisión: dd/MM/yyyy");
+        android.widget.EditText digit = new android.widget.EditText(this);
+        digit.setHint("Dígito verificador"); digit.setInputType(2);
+        fields.addView(dni); fields.addView(date); fields.addView(digit);
+        androidx.appcompat.app.AlertDialog dialog = new androidx.appcompat.app.AlertDialog.Builder(this)
+                .setTitle("Autorrelleno de Conoce Aquí")
+                .setMessage("Introduce tus datos una vez. Se guardan sólo en este dispositivo y se rellenan únicamente en Conoce Aquí. Revisa el formulario oficial antes de continuar.")
+                .setView(fields).setPositiveButton("Guardar y abrir", null).setNegativeButton("Cancelar", null).create();
+        dialog.setOnShowListener(ignored -> dialog.getButton(-1).setOnClickListener(v -> {
+            String d = dni.getText().toString().trim(), f = date.getText().toString().trim(), n = digit.getText().toString().trim();
+            boolean validDate;
+            try { java.text.SimpleDateFormat format = new java.text.SimpleDateFormat("dd/MM/yyyy", java.util.Locale.ROOT);
+                format.setLenient(false); validDate = format.parse(f) != null && f.matches("\\d{1,2}/\\d{1,2}/\\d{4}");
+            } catch (Exception error) { validDate = false; }
+            if (!d.matches("\\d{8}") || !n.matches("\\d") || !validDate) {
+                android.widget.Toast.makeText(this, "Revisa DNI, fecha y dígito", android.widget.Toast.LENGTH_SHORT).show(); return;
+            }
+            getSharedPreferences("sunarp_identity", MODE_PRIVATE).edit().putString("dni", d).putString("date", f).putString("digit", n).apply();
+            dialog.dismiss(); open(service);
+        }));
+        dialog.show();
     }
 
     private int dp(int value) {

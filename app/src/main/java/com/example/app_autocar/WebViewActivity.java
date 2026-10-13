@@ -41,7 +41,7 @@ public class WebViewActivity extends AppCompatActivity {
 
         String title = getIntent().getStringExtra(EXTRA_TITLE);
         initialUrl = getIntent().getStringExtra(EXTRA_URL);
-        plate = getIntent().getStringExtra(EXTRA_PLATE);
+        plate = PlateUtils.normalize(getIntent().getStringExtra(EXTRA_PLATE));
         if (plate == null) plate = "";
 
         ((TextView) findViewById(R.id.web_title)).setText(title == null ? getString(R.string.app_name) : title);
@@ -83,6 +83,7 @@ public class WebViewActivity extends AppCompatActivity {
                     routeSatToFines();
                 }
                 injectPlateIfAvailable();
+                injectSunarpIdentity(url);
             }
 
             @Override public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
@@ -140,6 +141,23 @@ public class WebViewActivity extends AppCompatActivity {
                 + "for(var k=0;k<links.length;k++){var a=links[k];if(a.href.indexOf('/VirtualSAT/modulos/papeletas.aspx?')>=0){"
                 + "clearInterval(t);window.location.href=a.href;return;}}}if(tries>=40)clearInterval(t);},500);})();";
         webView.evaluateJavascript(script, null);
+    }
+
+    private void injectSunarpIdentity(String url) {
+        if (url == null || !"conoce-aqui.sunarp.gob.pe".equals(Uri.parse(url).getHost())) return;
+        android.content.SharedPreferences identity = getSharedPreferences("sunarp_identity", MODE_PRIVATE);
+        if (!identity.contains("dni")) return;
+        String dni = org.json.JSONObject.quote(identity.getString("dni", ""));
+        String date = org.json.JSONObject.quote(identity.getString("date", ""));
+        String digit = org.json.JSONObject.quote(identity.getString("digit", ""));
+        webView.evaluateJavascript("(function(){if(window.__autocarIdentity)return;window.__autocarIdentity=true;var tries=0,t=setInterval(function(){"
+                + "tries++;document.querySelectorAll('input').forEach(function(e){if(e.type==='hidden'||e.type==='checkbox')return;"
+                + "var labels=Array.from(e.labels||[]).map(function(l){return l.innerText}).join(' ');"
+                + "var k=((e.id||'')+' '+(e.name||'')+' '+(e.placeholder||'')+' '+(e.getAttribute('formcontrolname')||'')+' '+labels).toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g,'');"
+                + "var v=null;if(/digito|verificador/.test(k))v=" + digit + ";else if(/emision/.test(k)){v=" + date + ";if(e.type==='date'){var p=v.split('/');v=p[2]+'-'+p[1].padStart(2,'0')+'-'+p[0].padStart(2,'0');}}"
+                + "else if(/dni|numerodocumento|numero.*documento|nrodocumento/.test(k))v=" + dni + ";"
+                + "if(v!==null&&!e.value){var s=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set;s.call(e,v);e.dispatchEvent(new Event('input',{bubbles:true}));e.dispatchEvent(new Event('change',{bubbles:true}));}});"
+                + "if(tries>=30)clearInterval(t);},600);})();", null);
     }
 
     private void goBackOrClose() {
