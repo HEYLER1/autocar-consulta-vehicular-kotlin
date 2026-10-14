@@ -22,4 +22,4 @@ local.properties
 .env.*
 *.hprof
 /dist/*
-!/dist/AUTOCAR-1.0.apk
+!/dist/AUTOCAR-*.apk

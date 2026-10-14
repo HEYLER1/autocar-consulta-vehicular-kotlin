@@ -129,12 +129,6 @@
         <TextView android:id="@+id/result_sutran" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="7dp" android:maxLines="2" android:text="SUTRAN · Consultando…" android:textColor="@color/text_secondary" android:textSize="11sp" />
         <TextView android:id="@+id/result_mtc" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="7dp" android:maxLines="2" android:text="MTC · Consultando…" android:textColor="@color/text_secondary" android:textSize="11sp" />
         <Button
-            android:id="@+id/open_full_report"
-            android:layout_width="match_parent"
-            android:layout_height="48dp"
-            android:text="VER INFORME COMPLETO"
-            android:textSize="12sp" />
-        <Button
             android:id="@+id/open_soat_source"
             android:layout_width="match_parent"
             android:layout_height="48dp"

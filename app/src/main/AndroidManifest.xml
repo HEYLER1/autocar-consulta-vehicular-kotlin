@@ -32,11 +32,8 @@
             android:exported="false" />
 
         <activity
-            android:name=".MultiCheckActivity"
-            android:exported="false" />
-
-        <activity
             android:name=".MainActivity"
+            android:windowSoftInputMode="adjustNothing"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

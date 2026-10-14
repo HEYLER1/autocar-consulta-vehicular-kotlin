@@ -13,7 +13,7 @@
         android:layout_height="wrap_content"
         android:minHeight="72dp"
         android:background="@color/white"
-        android:elevation="8dp"
+        android:elevation="0dp"
         app:itemIconTint="@color/bottom_nav_colors"
         app:itemTextColor="@color/bottom_nav_colors"
         app:labelVisibilityMode="labeled"

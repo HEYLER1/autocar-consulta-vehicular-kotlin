@@ -6,7 +6,7 @@ Es un prototipo en desarrollo para evaluar la eficiencia de acceso a informació
 
 ## Capturas de la aplicación
 
-Capturas de la versión actual en el emulador Android, tomadas el 13 de octubre de 2026. Inicio utiliza `ABC-123` como ejemplo, sin consultar esa placa. El informe muestra **datos ficticios de una prueba de interfaz**, no resultados oficiales ni mediciones del piloto. No se publican propietarios, DNI ni resultados personales.
+Capturas de interfaz en el emulador Android, tomadas el 13 de octubre de 2026: Inicio corresponde al diseño v1.6, conservado en v1.8; el informe ilustra una versión anterior del diseño general. Inicio utiliza `ABC-123` como ejemplo, sin consultar esa placa. El informe muestra **datos ficticios de una prueba de interfaz**, no resultados oficiales ni mediciones del piloto. No se publican propietarios, DNI ni resultados personales.
 
 <p align="center">
   <img src="docs/images/inicio-actual.png" width="290" alt="Inicio con fuentes prioritarias, ciudades seleccionables y conversor compacto">
@@ -51,7 +51,7 @@ Aunque el repositorio se llama `autocar-consulta-vehicular-kotlin`, las pantalla
 | Componente | Configuración del proyecto |
 |---|---|
 | Identificador | `com.example.app_autocar` |
-| Versión | `1.0` — código `1` |
+| Versión local actual | `1.5` — código `5` |
 | Android mínimo | API 34 (Android 14) |
 | SDK de compilación y destino | API 37 |
 | Gradle Wrapper | 9.6.0, con checksum configurado |
@@ -64,9 +64,17 @@ Aunque el repositorio se llama `autocar-consulta-vehicular-kotlin`, las pantalla
 
 ### Instalar el APK de prueba
 
-[Descargar AUTOCAR 1.0 con logo](https://github.com/HEYLER1/autocar-consulta-vehicular-kotlin/raw/refs/heads/main/dist/AUTOCAR-1.0.apk)
+Las nuevas entregas se guardan por versión: `dist/AUTOCAR-1.2.apk`, después `AUTOCAR-1.3.apk`, etc. Los APK anteriores se conservan. Para guardar una entrega sin sobrescribir versiones existentes:
 
-APK de depuración firmado, generado el 13 de octubre de 2026 y guardado en `dist/AUTOCAR-1.0.apk`. Requiere Android 14 (API 34) o superior. Android puede solicitar permiso para instalar aplicaciones desde el navegador o administrador de archivos. No es una versión de producción ni se publica en Google Play.
+```bash
+./gradlew :app:saveVersionedApk
+```
+
+La versión actual es v1.8. Los iconos tienen tamaño visual de 18 dp y área táctil de 48 dp. Descargar y compartir se agrupan en la esquina superior del informe, sin barra inferior; conservan etiquetas de accesibilidad. Guardar PDF abre el selector de archivos; compartir utiliza el menú de Android. Incluye limpieza del código y catálogo de fuentes separado; consulta la [estructura del código](docs/estructura_codigo.md).
+
+[Descargar AUTOCAR v1.8 con logo](https://github.com/HEYLER1/autocar-consulta-vehicular-kotlin/raw/refs/heads/main/dist/AUTOCAR-1.8.apk)
+
+APK de depuración firmado, generado el 13 de octubre de 2026 y guardado en `dist/AUTOCAR-1.8.apk`. Requiere Android 14 (API 34) o superior. Android puede solicitar permiso para instalar aplicaciones desde el navegador o administrador de archivos. No es una versión de producción ni se publica en Google Play. Se conservan los APK de entregas anteriores.
 
 La compilación, las pruebas unitarias y lint se verifican antes de publicar. Las pruebas instrumentadas comprueban selección, cancelación, progreso, captchas con formularios ficticios y renderizado del informe; no certifican todas las consultas reales de los portales externos.
 
@@ -133,3 +141,15 @@ gradle/                                   Wrapper y catálogo de versiones
 ## Autoría y licencia
 
 Proyecto mantenido por [HEYLER1](https://github.com/HEYLER1). No se ha añadido una licencia de uso: la publicación del código no implica una licencia abierta. Los nombres y servicios de terceros pertenecen a sus respectivas entidades.
+
+## Actualización local v1.6
+
+Inicio compacto: SUNARP, SOAT, SUTRAN y MTC visibles; las ciudades se seleccionan en «Multas por ciudad», cerrado por defecto y con contador. La selección se conserva y se bloquea durante una consulta. El selector se cierra al consultar. Formulario principal con jerarquía visual más clara e informe con placa destacada y acciones PDF compactas. Motor de consultas sin cambios. APK: `dist/AUTOCAR-1.6.apk`.
+
+## Actualización local v1.7
+
+Diseño consistente en Multas, Vehículo y Seguros: directorio visible, búsqueda directa y estado vacío explícito, filas con descripciones legibles y separadores. SUNARP tiene acceso discreto a datos locales; navegador interno con iconos compactos. Progreso, fuentes y verificación mantienen su flujo original con menor peso visual. Informe general separado por temas y enlace visible a toda la información. No se altera el contenido ni el diseño de los portales oficiales ni el motor de consultas. APK: `dist/AUTOCAR-1.7.apk`.
+
+## Actualización local v1.8
+
+Limpieza de filtros ocultos y recursos sin referencias, retirada del generador antiguo de informe/PDF y métodos sin uso, catálogo de fuentes separado de la pantalla y formato uniforme del código Java. Se conserva el motor de consultas y el contenedor usado por las pruebas. [Guía del código](docs/estructura_codigo.md). APK: `dist/AUTOCAR-1.8.apk`.

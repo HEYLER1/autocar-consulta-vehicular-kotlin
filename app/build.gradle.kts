@@ -22,8 +22,8 @@ android {
         applicationId = "com.example.app_autocar"
         minSdk = 34
         targetSdk = 37
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 8
+        versionName = "1.8"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -46,6 +46,19 @@ android {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
     }
+}
+
+// Release snapshots are immutable: bump versionName before saving the next update.
+val autocarVersion = android.defaultConfig.versionName!!
+val versionedApk = rootProject.layout.projectDirectory.file("dist/AUTOCAR-$autocarVersion.apk")
+tasks.register<Copy>("saveVersionedApk") {
+    val snapshotName = "AUTOCAR-$autocarVersion.apk"
+    val snapshotFile = versionedApk.asFile
+    dependsOn("assembleDebug")
+    from(layout.buildDirectory.file("outputs/apk/debug/app-debug.apk"))
+    into(rootProject.layout.projectDirectory.dir("dist"))
+    rename { snapshotName }
+    onlyIf("Preserve previously saved APK versions") { !snapshotFile.exists() }
 }
 
 dependencies {

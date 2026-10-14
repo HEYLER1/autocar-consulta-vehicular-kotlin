@@ -13,6 +13,48 @@ import java.util.concurrent.TimeUnit
 /** Offline WebView checks use real selector shapes, not real fines or captcha solutions. */
 @RunWith(AndroidJUnit4::class)
 class FinesAutomationTest {
+    @Test fun historyOnlyFillsHomeAndKeyboardKeepsLayoutStable(){
+        val instrumentation=InstrumentationRegistry.getInstrumentation();val context=instrumentation.targetContext;val preferences=context.getSharedPreferences("autocar_preferences",0)
+        val oldHistory=preferences.getString("recent_plates","");val oldPlate=preferences.getString("current_plate","")
+        preferences.edit().putString("recent_plates","ABC123").putString("current_plate","").commit()
+        val activity=instrumentation.startActivitySync(android.content.Intent(context,MainActivity::class.java).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) as MainActivity
+        val input=activity.findViewById<android.widget.EditText>(R.id.plate_input)
+        val root=activity.findViewById<android.view.View>(R.id.main_root)
+        fun waitForKeyboard(visible:Boolean){var found=false;repeat(40){instrumentation.runOnMainSync{found=androidx.core.view.ViewCompat.getRootWindowInsets(root)?.isVisible(androidx.core.view.WindowInsetsCompat.Type.ime())==visible};if(!found)Thread.sleep(100)};assertTrue("Keyboard visibility: $visible",found)}
+        try{
+            instrumentation.runOnMainSync{
+                activity.findViewById<android.widget.LinearLayout>(R.id.recent_container).getChildAt(0).performClick()
+                assertEquals("ABC-123",input.text.toString())
+                assertNull(MainActivity::class.java.getDeclaredField("inlineQuery").apply{isAccessible=true}.get(activity))
+                assertFalse(activity.isFinishing)
+                assertEquals(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING,activity.window.attributes.softInputMode and android.view.WindowManager.LayoutParams.SOFT_INPUT_MASK_ADJUST)
+                input.requestFocus();(activity.getSystemService(android.content.Context.INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager).showSoftInput(input,android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT)
+            }
+            waitForKeyboard(true)
+            instrumentation.runOnMainSync{assertEquals(android.view.View.GONE,activity.findViewById<android.view.View>(R.id.bottom_navigation).visibility);assertSame(input,activity.findViewById<android.widget.EditText>(R.id.plate_input));(activity.getSystemService(android.content.Context.INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager).hideSoftInputFromWindow(input.windowToken,0)}
+            waitForKeyboard(false)
+            instrumentation.runOnMainSync{assertEquals(android.view.View.VISIBLE,activity.findViewById<android.view.View>(R.id.bottom_navigation).visibility);assertEquals("ABC-123",input.text.toString())}
+        }finally{instrumentation.runOnMainSync{activity.finish()};preferences.edit().putString("recent_plates",oldHistory).putString("current_plate",oldPlate).commit()}
+    }
+    @Test fun secondaryScreensHaveReadableSourcesAndSearch(){
+        val instrumentation=InstrumentationRegistry.getInstrumentation();val context=instrumentation.targetContext
+        val activity=instrumentation.startActivitySync(android.content.Intent(context,MainActivity::class.java).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) as MainActivity
+        try{instrumentation.runOnMainSync{
+            val navigation=activity.findViewById<com.google.android.material.bottomnavigation.BottomNavigationView>(R.id.bottom_navigation)
+            navigation.selectedItemId=R.id.nav_fines
+            assertEquals(android.view.View.VISIBLE,activity.findViewById<android.view.View>(R.id.source_search).visibility)
+            val search=activity.findViewById<android.widget.EditText>(R.id.source_search);search.setText("ciudad inexistente")
+            val sources=activity.findViewById<android.widget.LinearLayout>(R.id.report_sources)
+            assertTrue((0 until sources.childCount).map{sources.getChildAt(it)}.filterIsInstance<android.widget.TextView>().any{it.text.toString().contains("No encontramos")})
+            navigation.selectedItemId=R.id.nav_vehicle
+            assertEquals(android.view.View.GONE,search.visibility)
+            assertTrue(sources.childCount>=3)
+            navigation.selectedItemId=R.id.nav_insurance
+            assertTrue(sources.childCount>=2)
+        }}finally{instrumentation.runOnMainSync{activity.finish()}}
+        val sunarp=instrumentation.startActivitySync(android.content.Intent(context,SunarpServicesActivity::class.java).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK).putExtra("plate","ABC123")) as SunarpServicesActivity
+        try{instrumentation.runOnMainSync{assertEquals("",sunarp.findViewById<android.widget.TextView>(R.id.sunarp_back).text.toString());assertTrue(sunarp.findViewById<android.widget.LinearLayout>(R.id.sunarp_documents).childCount>=4)}}finally{instrumentation.runOnMainSync{sunarp.finish()}}
+    }
     @Test fun readmeHomeScreenshotUsesOnlyExamplePlate(){
         val instrumentation=InstrumentationRegistry.getInstrumentation();val context=instrumentation.targetContext
         val preferences=context.getSharedPreferences("autocar_preferences",0)
@@ -43,7 +85,7 @@ class FinesAutomationTest {
         val activity=instrumentation.startActivitySync(android.content.Intent(instrumentation.targetContext,MainActivity::class.java).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) as MainActivity
         try{instrumentation.runOnMainSync{
             activity.findViewById<android.widget.EditText>(R.id.plate_input).setText("ABC123")
-            val sourceClass=MainActivity::class.java.declaredClasses.first{it.simpleName=="OfficialSource"}
+            val sourceClass=OfficialSource::class.java
             val constructor=sourceClass.declaredConstructors.first().apply{isAccessible=true}
             val source=constructor.newInstance("municipal","Prueba ficticia","","","about:blank","P")
             MainActivity::class.java.getDeclaredMethod("startFinesQuery",List::class.java).apply{isAccessible=true}.invoke(activity,listOf(source))
@@ -110,10 +152,22 @@ class FinesAutomationTest {
                 }
                 val option=findOption(activity.window.decorView)
                 assertNotNull("Inline city option",option)
+                fun cityToggle(view: android.view.View): android.widget.TextView? {
+                    if(view is android.widget.TextView && view.text.toString().startsWith("Multas por ciudad"))return view
+                    if(view is android.view.ViewGroup)for(i in 0 until view.childCount){val found=cityToggle(view.getChildAt(i));if(found!=null)return found}
+                    return null
+                }
+                val toggle=cityToggle(activity.window.decorView)!!
+                val cityContainer=option!!.parent.parent as android.view.View
+                assertEquals(android.view.View.GONE,cityContainer.visibility)
+                toggle.performClick()
+                assertEquals(android.view.View.VISIBLE,cityContainer.visibility)
                 val before=button.text.toString();option!!.performClick()
                 assertNotEquals(before,button.text.toString())
                 option.performClick() // Restore saved selection; no real query is made.
                 assertEquals(before,button.text.toString())
+                toggle.performClick()
+                assertEquals(android.view.View.GONE,cityContainer.visibility)
                 assertFalse(activity.isFinishing)
             }
             instrumentation.waitForIdleSync()
