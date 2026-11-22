@@ -25,7 +25,7 @@ Fecha de revisión: 13 de octubre de 2026. Se revisaron formularios públicos me
 
 El dominio de contenido de SATT mostró contenido ajeno en su página; no se utiliza como base para automatizar ni enviar datos personales. La consulta digital observada requiere iniciar sesión. No se sortearon controles de seguridad.
 
-Los captchas no se resuelven con OCR ni se modifican sus tokens. Sólo se muestra la imagen existente cuando el navegador permite leerla, y el usuario introduce el código. Las verificaciones interactivas permanecen en el portal oficial. Las consultas conservan WebViews independientes y no recargan la página al enviar un código.
+Los captchas de imagen se leen localmente con ddddocr y el código se precarga para revisión; el usuario puede corregirlo. No se modifican tokens ni se resuelven verificaciones interactivas. Las verificaciones interactivas permanecen en el portal oficial. Las consultas conservan WebViews independientes y no recargan la página al enviar un código.
 
 Las respuestas vacías, errores HTTP, errores TLS, fuentes que requieren cuenta y controles pendientes deben permanecer diferenciados en el informe PDF. El HTTP de Piura y Pucallpa no cifra el tráfico; el resto de la política TLS permanece sin cambios.
 

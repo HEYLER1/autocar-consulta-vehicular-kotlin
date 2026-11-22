@@ -22,10 +22,16 @@ android {
         applicationId = "com.example.app_autocar"
         minSdk = 34
         targetSdk = 37
-        versionCode = 8
-        versionName = "1.8"
+        versionCode = 42
+        versionName = "1.42"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        ndk {
+            // ONNX Runtime solo se empaqueta para ABIs de 64 bits y ARMv7; el resto usa el
+            // ingreso manual de captchas.
+            abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64")
+        }
     }
 
     buildTypes {
@@ -66,6 +72,7 @@ dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.material)
     implementation("com.google.mlkit:text-recognition:16.0.1")
+    implementation(libs.onnxruntime.android)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(libs.androidx.junit)

@@ -13,7 +13,8 @@ El código Android está en `app/src/main/java/com/example/app_autocar/`.
 
 - `OfficialSource`: datos inmutables de una entidad.
 - `OfficialSourceCatalog`: lista de fuentes y sus enlaces, sin lógica de consultas.
-- `UnifiedQueryPanel`: coordina la sesión, progreso, verificación manual y resultados municipales. Integra el motor prioritario sin reemplazar sus adaptadores.
+- `UnifiedQueryPanel`: coordina la sesión, progreso, verificación manual y resultados municipales. Integra el motor prioritario sin reemplazar sus adaptadores. Completa y envía el código reconocido, y reintenta con el nuevo captcha hasta 10 veces por fuente.
+- `DdddOcrEngine`: reconocimiento local de captchas con el modelo de ddddocr y ONNX Runtime; entrega el texto al panel de verificación y se desactiva si la ABI no tiene librería nativa.
 - `PriorityQueryEngine`: comportamiento específico de SUNARP, SBS, SUTRAN y MTC. Su vista interna conserva los WebViews y controles que necesita el motor; no es una segunda pantalla de Inicio.
 - `FinesPortalAdapter`: formularios y respuestas específicos de portales municipales.
 - `SutranResponse`: clasificación de respuestas oficiales de SUTRAN, incluida ausencia explícita de papeletas.

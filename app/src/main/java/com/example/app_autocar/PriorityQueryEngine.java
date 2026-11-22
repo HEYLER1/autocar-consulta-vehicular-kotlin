@@ -177,6 +177,9 @@ public class PriorityQueryEngine extends android.view.ContextThemeWrapper {
   private final boolean[] ocrInFlight = new boolean[PORTALS.length];
   private final boolean[] apiFallback = new boolean[PORTALS.length];
   private final boolean[] captchaReady = new boolean[PORTALS.length];
+  private final int[] captchaReloads = new int[PORTALS.length];
+  /** Full page reloads allowed per portal before the code is left for manual entry. */
+  private static final int MAX_CAPTCHA_RELOADS = 3;
   private final boolean[] validationPending = new boolean[PORTALS.length];
   private final boolean[] resultComplete = new boolean[PORTALS.length];
   private final boolean[] sourceAlert = new boolean[PORTALS.length];
@@ -439,6 +442,7 @@ public class PriorityQueryEngine extends android.view.ContextThemeWrapper {
             + "';e.dispatchEvent(new Event('input',{bubbles:true}));e.dispatchEvent(new"
             + " Event('change',{bubbles:true}));e.dispatchEvent(new"
             + " Event('blur',{bubbles:true}));found=true;break;}}"
+            + "Array.from(document.querySelectorAll('select')).forEach(function(s){Array.from(s.options||[]).forEach(function(o){if(/placa|patente/i.test(o.text||o.label||'')){s.value=o.value;s.dispatchEvent(new Event('change',{bubbles:true}));}});});"
             + "if(!found&&fillAttempts<40)return;clearInterval(fillTimer);if(!found)return;if("
             + (index >= 1 && index <= 3)
             + ")return;setTimeout(function(){var"
@@ -564,6 +568,7 @@ public class PriorityQueryEngine extends android.view.ContextThemeWrapper {
           validationPending[index] = false;
           captchaSubmitted = false;
           captchaReady[index] = false;
+          if (reloadPortal(index)) return;
           setResult(index, "El portal tardó demasiado; verifica el código otra vez", true);
           captureCaptcha(index);
           handler.postDelayed(() -> captureCaptcha(index), 1500);
@@ -579,9 +584,53 @@ public class PriorityQueryEngine extends android.view.ContextThemeWrapper {
     EditText input =
         index == 1 ? soatCaptchaInput : index == 2 ? sutranCaptchaInput : mtcCaptchaInput;
     input.setText("");
+    // Do not resubmit the same rejected code: reload the portal and let the fresh form ask for a
+    // new image, then recognise and submit it again.
+    if (reloadPortal(index)) return;
     setResult(index, "Escribe el nuevo código mostrado", false);
     handler.postDelayed(() -> captureCaptcha(index), 700);
     handler.postDelayed(() -> captureCaptcha(index), 1800);
+  }
+
+  /**
+   * Reloads the portal so a new session and a new CAPTCHA are requested instead of retrying the
+   * rejected one. Returns false when the portal cannot be reloaded (API fallback, finished result
+   * or reload cap reached), in which case the caller keeps the manual flow.
+   */
+  private boolean reloadPortal(int index) {
+    if (index < 1
+        || index > 3
+        || index >= webViews.size()
+        || isPlacApiPortal(index)
+        || resultComplete[index]
+        || captchaReloads[index] >= MAX_CAPTCHA_RELOADS) return false;
+    captchaReloads[index]++;
+    validationPending[index] = false;
+    captchaSubmitted = false;
+    captchaReady[index] = false;
+    imageProcessed[index] = false;
+    if (index == 2) sutranQuerySent = false;
+    setResult(
+        index,
+        "Verificación no superada · recargando "
+            + PORTALS[index].name
+            + " ("
+            + captchaReloads[index]
+            + "/"
+            + MAX_CAPTCHA_RELOADS
+            + ")…",
+        false);
+    webViews.get(index).loadUrl(PORTALS[index].url);
+    return true;
+  }
+
+  /**
+   * Requests a new CAPTCHA for a portal whose code could not be read. Reloads the page while
+   * reloads remain; after the cap it only re-reads the current image for manual entry.
+   */
+  public void retry(int index) {
+    if (reloadPortal(index)) return;
+    handler.postDelayed(() -> captureCaptcha(index), 700);
   }
 
   private void submitCaptchaToPortal(

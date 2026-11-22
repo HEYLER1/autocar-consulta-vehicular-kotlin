@@ -20,7 +20,19 @@ class FinesAutomationTest {
         val activity=instrumentation.startActivitySync(android.content.Intent(context,MainActivity::class.java).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) as MainActivity
         val input=activity.findViewById<android.widget.EditText>(R.id.plate_input)
         val root=activity.findViewById<android.view.View>(R.id.main_root)
-        fun waitForKeyboard(visible:Boolean){var found=false;repeat(40){instrumentation.runOnMainSync{found=androidx.core.view.ViewCompat.getRootWindowInsets(root)?.isVisible(androidx.core.view.WindowInsetsCompat.Type.ime())==visible};if(!found)Thread.sleep(100)};assertTrue("Keyboard visibility: $visible",found)}
+        // The emulator shows the system "page size mismatch" warning once per install. It owns the
+        // focused window and makes the IME ignore showSoftInput(), so dismiss it before asking.
+        fun dismissSystemWarning(){
+            val root=instrumentation.uiAutomation.rootInActiveWindow?:return
+            if(root.packageName!="android")return
+            fun clickableButton(node:android.view.accessibility.AccessibilityNodeInfo):android.view.accessibility.AccessibilityNodeInfo?{
+                if(node.isClickable&&node.className?.contains("Button")==true)return node
+                for(i in 0 until node.childCount)clickableButton(node.getChild(i) ?: continue)?.let{return it}
+                return null
+            }
+            clickableButton(root)?.performAction(android.view.accessibility.AccessibilityNodeInfo.ACTION_CLICK)
+        }
+        fun waitForKeyboard(visible:Boolean){var found=false;repeat(120){dismissSystemWarning();instrumentation.runOnMainSync{if(activity.window.decorView.hasWindowFocus()){if(!input.isFocused)input.requestFocus();if(visible)(activity.getSystemService(android.content.Context.INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager).showSoftInput(input,android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT)};found=androidx.core.view.ViewCompat.getRootWindowInsets(root)?.isVisible(androidx.core.view.WindowInsetsCompat.Type.ime())==visible};if(!found)Thread.sleep(100)};assertTrue("Keyboard visibility: $visible",found)}
         try{
             instrumentation.runOnMainSync{
                 activity.findViewById<android.widget.LinearLayout>(R.id.recent_container).getChildAt(0).performClick()
@@ -31,25 +43,23 @@ class FinesAutomationTest {
                 input.requestFocus();(activity.getSystemService(android.content.Context.INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager).showSoftInput(input,android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT)
             }
             waitForKeyboard(true)
-            instrumentation.runOnMainSync{assertEquals(android.view.View.GONE,activity.findViewById<android.view.View>(R.id.bottom_navigation).visibility);assertSame(input,activity.findViewById<android.widget.EditText>(R.id.plate_input));(activity.getSystemService(android.content.Context.INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager).hideSoftInputFromWindow(input.windowToken,0)}
+            instrumentation.runOnMainSync{assertEquals(android.view.View.GONE,activity.findViewById<android.view.View>(R.id.top_navigation).visibility);assertSame(input,activity.findViewById<android.widget.EditText>(R.id.plate_input));(activity.getSystemService(android.content.Context.INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager).hideSoftInputFromWindow(input.windowToken,0)}
             waitForKeyboard(false)
-            instrumentation.runOnMainSync{assertEquals(android.view.View.VISIBLE,activity.findViewById<android.view.View>(R.id.bottom_navigation).visibility);assertEquals("ABC-123",input.text.toString())}
+            instrumentation.runOnMainSync{assertEquals(android.view.View.VISIBLE,activity.findViewById<android.view.View>(R.id.top_navigation).visibility);assertEquals("ABC-123",input.text.toString())}
         }finally{instrumentation.runOnMainSync{activity.finish()};preferences.edit().putString("recent_plates",oldHistory).putString("current_plate",oldPlate).commit()}
     }
     @Test fun secondaryScreensHaveReadableSourcesAndSearch(){
         val instrumentation=InstrumentationRegistry.getInstrumentation();val context=instrumentation.targetContext
         val activity=instrumentation.startActivitySync(android.content.Intent(context,MainActivity::class.java).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) as MainActivity
         try{instrumentation.runOnMainSync{
-            val navigation=activity.findViewById<com.google.android.material.bottomnavigation.BottomNavigationView>(R.id.bottom_navigation)
-            navigation.selectedItemId=R.id.nav_fines
-            assertEquals(android.view.View.VISIBLE,activity.findViewById<android.view.View>(R.id.source_search).visibility)
-            val search=activity.findViewById<android.widget.EditText>(R.id.source_search);search.setText("ciudad inexistente")
+            val navigation=activity.findViewById<com.google.android.material.tabs.TabLayout>(R.id.top_navigation)
+            assertEquals(3,navigation.tabCount)
+            val search=activity.findViewById<android.widget.EditText>(R.id.source_search)
             val sources=activity.findViewById<android.widget.LinearLayout>(R.id.report_sources)
-            assertTrue((0 until sources.childCount).map{sources.getChildAt(it)}.filterIsInstance<android.widget.TextView>().any{it.text.toString().contains("No encontramos")})
-            navigation.selectedItemId=R.id.nav_vehicle
+            navigation.selectTab(navigation.getTabAt(1))
             assertEquals(android.view.View.GONE,search.visibility)
             assertTrue(sources.childCount>=3)
-            navigation.selectedItemId=R.id.nav_insurance
+            navigation.selectTab(navigation.getTabAt(2))
             assertTrue(sources.childCount>=2)
         }}finally{instrumentation.runOnMainSync{activity.finish()}}
         val sunarp=instrumentation.startActivitySync(android.content.Intent(context,SunarpServicesActivity::class.java).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK).putExtra("plate","ABC123")) as SunarpServicesActivity
@@ -93,12 +103,13 @@ class FinesAutomationTest {
             val slot=MainActivity::class.java.getDeclaredField("inlineQuerySlot").apply{isAccessible=true}.get(activity) as android.widget.LinearLayout
             assertSame(slot,panel.view().parent)
             panel.view().measure(android.view.View.MeasureSpec.makeMeasureSpec(1080,android.view.View.MeasureSpec.EXACTLY),android.view.View.MeasureSpec.makeMeasureSpec(0,android.view.View.MeasureSpec.UNSPECIFIED))
-            assertTrue("Collapsed query must not reserve the hidden browser viewport",panel.view().measuredHeight<180*activity.resources.displayMetrics.density)
+            // Includes the title, source preview and findings action added since the original test.
+            assertTrue("Collapsed query must not reserve the hidden browser viewport",panel.view().measuredHeight<320*activity.resources.displayMetrics.density)
             assertNotNull(activity.findViewById<android.view.View>(R.id.plate_input))
-            assertEquals(R.id.nav_home,activity.findViewById<com.google.android.material.bottomnavigation.BottomNavigationView>(R.id.bottom_navigation).selectedItemId)
+            assertEquals(0,activity.findViewById<com.google.android.material.tabs.TabLayout>(R.id.top_navigation).selectedTabPosition)
             assertFalse(activity.isFinishing)
             assertTrue(activity.findViewById<android.view.View>(R.id.search_plate).isEnabled)
-            assertEquals("Cancelar",activity.findViewById<android.widget.TextView>(R.id.search_plate).text.toString())
+            assertEquals("Cancelar consulta",activity.findViewById<android.widget.TextView>(R.id.search_plate).text.toString())
             MainActivity::class.java.getDeclaredMethod("startFinesQuery",List::class.java).apply{isAccessible=true}.invoke(activity,listOf(source))
             assertSame("Repeated requests must not replace the active session",panel,MainActivity::class.java.getDeclaredField("inlineQuery").apply{isAccessible=true}.get(activity))
             activity.findViewById<android.view.View>(R.id.search_plate).performClick()
@@ -138,6 +149,8 @@ class FinesAutomationTest {
             instrumentation.runOnMainSync {
                 val button = activity.findViewById<android.widget.TextView>(R.id.search_plate)
                 assertTrue(button.text.toString().startsWith("Consultar"))
+                assertTrue(button.isShown)
+                assertTrue(activity.findViewById<android.view.View>(R.id.plate_input).isShown)
                 val labels=mutableListOf<String>()
                 fun collect(view:android.view.View){
                     if(view is com.google.android.material.button.MaterialButton && view.isCheckable)labels.add(view.text.toString())
@@ -145,27 +158,33 @@ class FinesAutomationTest {
                 }
                 collect(activity.window.decorView)
                 assertEquals(listOf("SUNARP","SOAT","SUTRAN","MTC"),labels.take(4))
-                fun findOption(view: android.view.View): android.widget.TextView? {
+                fun findOption(view: android.view.View): com.google.android.material.button.MaterialButton? {
                     if(view is com.google.android.material.button.MaterialButton && view.text.toString()=="Cusco")return view
                     if(view is android.view.ViewGroup)for(i in 0 until view.childCount){val found=findOption(view.getChildAt(i));if(found!=null)return found}
                     return null
                 }
                 val option=findOption(activity.window.decorView)
                 assertNotNull("Inline city option",option)
-                fun cityToggle(view: android.view.View): android.widget.TextView? {
-                    if(view is android.widget.TextView && view.text.toString().startsWith("Multas por ciudad"))return view
-                    if(view is android.view.ViewGroup)for(i in 0 until view.childCount){val found=cityToggle(view.getChildAt(i));if(found!=null)return found}
+                fun sourcesHeading(view: android.view.View): android.widget.TextView? {
+                    if(view is android.widget.TextView && view.text.toString().startsWith("Elegir fuentes"))return view
+                    if(view is android.view.ViewGroup)for(i in 0 until view.childCount){val found=sourcesHeading(view.getChildAt(i));if(found!=null)return found}
                     return null
                 }
-                val toggle=cityToggle(activity.window.decorView)!!
+                // El encabezado «Elegir fuentes» abre y cierra la selección; el contenedor de ciudades
+                // permanece oculto hasta pulsarlo.
+                val toggle=sourcesHeading(activity.window.decorView)!!.parent as android.view.View
                 val cityContainer=option!!.parent.parent as android.view.View
                 assertEquals(android.view.View.GONE,cityContainer.visibility)
                 toggle.performClick()
                 assertEquals(android.view.View.VISIBLE,cityContainer.visibility)
-                val before=button.text.toString();option!!.performClick()
-                assertNotEquals(before,button.text.toString())
+                assertTrue(option.isShown)
+                val before=button.text.toString()
+                val wasChecked=option.isChecked
+                option.performClick()
+                assertEquals("La ciudad cambia de selección",!wasChecked,option.isChecked)
+                assertEquals("Elegir una fuente en Inicio no inicia la consulta",before,button.text.toString())
                 option.performClick() // Restore saved selection; no real query is made.
-                assertEquals(before,button.text.toString())
+                assertEquals("La ciudad recupera su selección original",wasChecked,option.isChecked)
                 toggle.performClick()
                 assertEquals(android.view.View.GONE,cityContainer.visibility)
                 assertFalse(activity.isFinishing)

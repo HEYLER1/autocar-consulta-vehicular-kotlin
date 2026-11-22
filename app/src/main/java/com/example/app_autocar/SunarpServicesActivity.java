@@ -169,6 +169,11 @@ public class SunarpServicesActivity extends AppCompatActivity {
       requestIdentity(service);
       return;
     }
+    if (service.url.contains("sigueloplus.sunarp.gob.pe")
+        && !getSharedPreferences("siguelo_identity", MODE_PRIVATE).contains("numero")) {
+      requestSigueloIdentity(service);
+      return;
+    }
     Intent intent = new Intent(this, WebViewActivity.class);
     intent.putExtra(WebViewActivity.EXTRA_TITLE, service.title);
     intent.putExtra(WebViewActivity.EXTRA_URL, service.url);
@@ -188,9 +193,13 @@ public class SunarpServicesActivity extends AppCompatActivity {
     android.widget.EditText digit = new android.widget.EditText(this);
     digit.setHint("Dígito verificador");
     digit.setInputType(2);
+    android.widget.EditText email = new android.widget.EditText(this);
+    email.setHint("Correo registrado en SUNARP");
+    email.setInputType(android.text.InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS);
     fields.addView(dni);
     fields.addView(date);
     fields.addView(digit);
+    fields.addView(email);
     androidx.appcompat.app.AlertDialog dialog =
         new androidx.appcompat.app.AlertDialog.Builder(this)
             .setTitle("Autorrelleno de Conoce Aquí")
@@ -210,7 +219,8 @@ public class SunarpServicesActivity extends AppCompatActivity {
                     v -> {
                       String d = dni.getText().toString().trim(),
                           f = date.getText().toString().trim(),
-                          n = digit.getText().toString().trim();
+                          n = digit.getText().toString().trim(),
+                          e = email.getText().toString().trim();
                       boolean validDate;
                       try {
                         java.text.SimpleDateFormat format =
@@ -221,10 +231,11 @@ public class SunarpServicesActivity extends AppCompatActivity {
                       } catch (Exception error) {
                         validDate = false;
                       }
-                      if (!d.matches("\\d{8}") || !n.matches("\\d") || !validDate) {
+                      if (!d.matches("\\d{8}") || !n.matches("\\d") || !validDate
+                          || !e.contains("@")) {
                         android.widget.Toast.makeText(
                                 this,
-                                "Revisa DNI, fecha y dígito",
+                                "Revisa DNI, fecha, dígito y correo",
                                 android.widget.Toast.LENGTH_SHORT)
                             .show();
                         return;
@@ -234,6 +245,59 @@ public class SunarpServicesActivity extends AppCompatActivity {
                           .putString("dni", d)
                           .putString("date", f)
                           .putString("digit", n)
+                          .putString("email", e)
+                          .apply();
+                      dialog.dismiss();
+                      open(service);
+                    }));
+    dialog.show();
+  }
+
+  private void requestSigueloIdentity(Service service) {
+    LinearLayout fields = new LinearLayout(this);
+    fields.setOrientation(LinearLayout.VERTICAL);
+    fields.setPadding(dp(24), dp(8), dp(24), dp(8));
+    android.widget.EditText oficina = new android.widget.EditText(this);
+    oficina.setHint("Oficina registral (ej. LIMA)");
+    android.widget.EditText anio = new android.widget.EditText(this);
+    anio.setHint("Año del título (ej. 2024)");
+    anio.setInputType(2);
+    android.widget.EditText numero = new android.widget.EditText(this);
+    numero.setHint("Número de título");
+    numero.setInputType(2);
+    fields.addView(oficina);
+    fields.addView(anio);
+    fields.addView(numero);
+    androidx.appcompat.app.AlertDialog dialog =
+        new androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("Autorrelleno de Síguelo Plus")
+            .setMessage(
+                "Introduce los datos del título una vez. Se guardan sólo en este dispositivo y se"
+                    + " rellenan automáticamente. El captcha Turnstile se resuelve manualmente.")
+            .setView(fields)
+            .setPositiveButton("Guardar y abrir", null)
+            .setNegativeButton("Cancelar", null)
+            .create();
+    dialog.setOnShowListener(
+        ignored ->
+            dialog
+                .getButton(-1)
+                .setOnClickListener(
+                    v -> {
+                      String o = oficina.getText().toString().trim();
+                      String a = anio.getText().toString().trim();
+                      String n = numero.getText().toString().trim();
+                      if (o.isEmpty() || !a.matches("\\d{4}") || n.isEmpty()) {
+                        android.widget.Toast.makeText(
+                                this, "Revisa oficina, año y número", android.widget.Toast.LENGTH_SHORT)
+                            .show();
+                        return;
+                      }
+                      getSharedPreferences("siguelo_identity", MODE_PRIVATE)
+                          .edit()
+                          .putString("oficina", o)
+                          .putString("anio", a)
+                          .putString("numero", n)
                           .apply();
                       dialog.dismiss();
                       open(service);

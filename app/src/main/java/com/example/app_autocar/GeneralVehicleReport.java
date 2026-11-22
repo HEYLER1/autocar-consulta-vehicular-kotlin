@@ -54,6 +54,24 @@ public final class GeneralVehicleReport {
     return out.toString();
   }
 
+  static String findings(List<Entry> entries) {
+    StringBuilder received = new StringBuilder();
+    StringBuilder unresolved = new StringBuilder();
+    for (Entry entry : entries) {
+      if (entry.status.startsWith("Información recibida")) {
+        String value = entry.summary.trim();
+        if (value.isEmpty()) value = "Respuesta recibida. Revisa el detalle de la fuente.";
+        received.append("\n• ").append(entry.name).append(": ").append(value);
+      } else {
+        unresolved.append("\n• ").append(entry.name).append(": ")
+            .append(entry.status.isBlank() ? "Sin verificar" : entry.status);
+      }
+    }
+    return (received.length() == 0 ? "Aún no hay resultados confirmados." : "Lo que informaron las fuentes:" + received)
+        + (unresolved.length() == 0 ? "" : "\n\nSin verificar:" + unresolved)
+        + "\n\nEl resumen solo cubre las fuentes seleccionadas. Lo no verificado no equivale a ausencia de multas o cargas.";
+  }
+
   private static int group(Entry entry) {
     String host = FinesPortalAdapter.host(entry.url);
     return host.equals("consultavehicular.sunarp.gob.pe")

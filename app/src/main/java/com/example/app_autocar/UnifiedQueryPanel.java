@@ -80,6 +80,17 @@ public class UnifiedQueryPanel extends android.view.ContextThemeWrapper {
   private final java.util.Set<WebView> submitted = new java.util.HashSet<>();
   private final java.util.Map<WebView, LinearLayout> verificationPanels = new java.util.HashMap<>();
   private final java.util.Map<WebView, Integer> attempts = new java.util.HashMap<>();
+  private final java.util.Map<WebView, Integer> autoCaptchaAttempts = new java.util.HashMap<>();
+  private final java.util.Map<WebView, String> autoCaptchaTexts = new java.util.HashMap<>();
+  private final java.util.Map<WebView, Integer> verificationCaptchaHashes =
+      new java.util.HashMap<>();
+  private final java.util.Map<WebView, Integer> captchaReloads = new java.util.HashMap<>();
+  private final java.util.Map<WebView, String> portalUrls = new java.util.HashMap<>();
+  /** True once the OCR engine reported it is unavailable; avoids pointless page reloads. */
+  private boolean ocrUnavailable;
+  private static final int MAX_AUTO_CAPTCHA_ATTEMPTS = 10;
+  /** Full page reloads allowed per source before the code is left for manual entry. */
+  private static final int MAX_CAPTCHA_RELOADS = 3;
   private final java.util.Map<WebView, Integer> generations = new java.util.HashMap<>();
   private final java.util.Map<WebView, Integer> resultAttempts = new java.util.HashMap<>();
   private final java.util.Set<WebView> failed = new java.util.HashSet<>();
@@ -99,6 +110,9 @@ public class UnifiedQueryPanel extends android.view.ContextThemeWrapper {
   private android.widget.ProgressBar queryProgress;
   private TextView queryProgressText;
   private TextView resultsAction;
+  private LinearLayout chatResultRows;
+  private TextView chatFindings;
+  private String latestFindings = "Aún no hay resultados confirmados.";
   private final java.util.Map<WebView, LinearLayout> sourceCards = new java.util.HashMap<>();
   private final java.util.Map<WebView, LinearLayout> verificationCards = new java.util.HashMap<>();
   private final java.util.Map<WebView, android.widget.EditText> codes = new java.util.HashMap<>();
@@ -141,6 +155,12 @@ public class UnifiedQueryPanel extends android.view.ContextThemeWrapper {
     sourceNames = names;
     sourceUrls = urls;
     queryPlate = plate;
+    autoCaptchaAttempts.clear();
+    autoCaptchaTexts.clear();
+    verificationCaptchaHashes.clear();
+    captchaReloads.clear();
+    portalUrls.clear();
+    ocrUnavailable = false;
     LinearLayout root = new LinearLayout(this);
     root.setOrientation(LinearLayout.VERTICAL);
     root.setBackgroundColor(Color.rgb(244, 247, 249));
@@ -172,7 +192,14 @@ public class UnifiedQueryPanel extends android.view.ContextThemeWrapper {
     LinearLayout progressStrip = new LinearLayout(this);
     progressStrip.setOrientation(LinearLayout.VERTICAL);
     progressStrip.setPadding(dp(16), dp(8), dp(16), dp(4));
+    progressStrip.setBackgroundResource(R.drawable.bg_round_card);
     root.addView(progressStrip);
+    TextView cardTitle = new TextView(this);
+    cardTitle.setText(PlateUtils.display(plate) + " · Consulta integrada");
+    cardTitle.setTextColor(Color.rgb(0, 43, 92));
+    cardTitle.setTextSize(17);
+    cardTitle.setTypeface(null, android.graphics.Typeface.BOLD);
+    progressStrip.addView(cardTitle);
     queryProgressText = new TextView(this);
     queryProgressText.setText("0% · Preparando consulta");
     queryProgressText.setTextSize(13);
@@ -186,13 +213,31 @@ public class UnifiedQueryPanel extends android.view.ContextThemeWrapper {
     queryProgress.setProgressBackgroundTintList(
         android.content.res.ColorStateList.valueOf(Color.rgb(225, 232, 240)));
     progressStrip.addView(queryProgress, new LinearLayout.LayoutParams(-1, dp(6)));
+    chatResultRows = new LinearLayout(this);
+    chatResultRows.setOrientation(LinearLayout.VERTICAL);
+    progressStrip.addView(chatResultRows);
+    TextView findingsAction = sectionButton("¿Qué tiene este vehículo?", 0, progressStrip);
+    findingsAction.setLayoutParams(new LinearLayout.LayoutParams(-1, dp(48)));
+    chatFindings = new TextView(this);
+    chatFindings.setTextSize(14);
+    chatFindings.setTextColor(Color.rgb(30, 49, 70));
+    chatFindings.setPadding(0, 0, 0, dp(12));
+    chatFindings.setTextIsSelectable(true);
+    chatFindings.setVisibility(View.GONE);
+    progressStrip.addView(chatFindings);
+    findingsAction.setOnClickListener(v -> {
+      if (chatFindings.isShown()) chatFindings.setVisibility(View.GONE);
+      else showFindings();
+    });
     resultsAction = new TextView(this);
-    resultsAction.setText("Ver resultados →");
+    resultsAction.setText("Ver detalle →");
     resultsAction.setTextColor(Color.rgb(0, 43, 92));
     resultsAction.setTextSize(15);
     resultsAction.setTypeface(null, android.graphics.Typeface.BOLD);
     resultsAction.setGravity(android.view.Gravity.CENTER_VERTICAL);
     resultsAction.setMinHeight(dp(48));
+    resultsAction.setBackgroundResource(R.drawable.bg_icon_blue);
+    resultsAction.setPadding(dp(12), 0, dp(12), 0);
     progressStrip.addView(resultsAction);
     resultsAction.setOnClickListener(v -> openResultsPage());
     LinearLayout tabs = new LinearLayout(this);
@@ -264,7 +309,7 @@ public class UnifiedQueryPanel extends android.view.ContextThemeWrapper {
     verificationList.addView(verificationHint);
     com.google.android.material.button.MaterialButton continueAll =
         new com.google.android.material.button.MaterialButton(this);
-    continueAll.setText("Continuar");
+    continueAll.setText("Enviar códigos ingresados");
     continueAll.setAllCaps(false);
     continueAll.setCornerRadius(dp(10));
     continueAll.setBackgroundTintList(
@@ -441,6 +486,7 @@ public class UnifiedQueryPanel extends android.view.ContextThemeWrapper {
       WebView web = priority >= 0 ? priorityEngine.portal(priority) : new WebView(this);
       if (web.getParent() != null) ((android.view.ViewGroup) web.getParent()).removeView(web);
       portals.add(web);
+      portalUrls.put(web, url);
       web.getSettings().setJavaScriptEnabled(true);
       web.getSettings().setDomStorageEnabled(true);
       web.getSettings().setUseWideViewPort(true);
@@ -608,8 +654,11 @@ public class UnifiedQueryPanel extends android.view.ContextThemeWrapper {
                 LinearLayout p = verificationPanels.get(view);
                 p.removeAllViews();
                 p.setVisibility(View.GONE);
-                status.setText("Código rechazado · revisa la nueva imagen");
-                handler.postDelayed(() -> captureVerification(view, status, name), 1000);
+                codes.remove(view);
+                codeButtons.remove(view);
+                autoCaptchaTexts.remove(view);
+                status.setText("Código rechazado · recargando la fuente");
+                reloadSource(view, status, name);
               } else {
                 failed.add(view);
                 status.setText("Mensaje del portal · " + message);
@@ -703,8 +752,17 @@ public class UnifiedQueryPanel extends android.view.ContextThemeWrapper {
   }
 
   private void captureVerification(WebView web, TextView status, String name) {
+    captureVerification(web, status, name, true);
+  }
+
+  /**
+   * Shows the CAPTCHA image currently present in the official form. When {@code solve} is true the
+   * recognised code is filled and submitted automatically; when false the image is only displayed
+   * so the code can be typed by hand.
+   */
+  private void captureVerification(WebView web, TextView status, String name, boolean solve) {
     LinearLayout panel = verificationPanels.get(web);
-    if (panel == null || panel.getChildCount() > 0) return;
+    if (panel == null) return;
     FinesPortalAdapter adapter =
         FinesPortalAdapter.forUrl(web.getUrl() == null ? "" : web.getUrl());
     // Only display the existing image. No OCR, solving, token modification or new challenge
@@ -736,7 +794,7 @@ public class UnifiedQueryPanel extends android.view.ContextThemeWrapper {
     web.evaluateJavascript(
         script,
         encoded -> {
-          if (isFinishing() || isDestroyed() || panel.getChildCount() > 0) return;
+          if (isFinishing() || isDestroyed()) return;
           try {
             Object decoded = new org.json.JSONTokener(encoded).nextValue();
             if (!(decoded instanceof String)
@@ -747,6 +805,21 @@ public class UnifiedQueryPanel extends android.view.ContextThemeWrapper {
             }
             String data = (String) decoded;
             if (data.length() > 2000000) return;
+            int imageHash = data.hashCode();
+            boolean built = panel.getChildCount() > 0;
+            if (java.util.Objects.equals(verificationCaptchaHashes.get(web), imageHash)) {
+              // Same image as the one already shown or rejected: never solve it twice.
+              return;
+            }
+            if (built) {
+              // The portal generated another CAPTCHA: discard the previous code so the new image
+              // is recognised and submitted instead of reusing the rejected one.
+              panel.removeAllViews();
+              codes.remove(web);
+              codeButtons.remove(web);
+              autoCaptchaTexts.remove(web);
+            }
+            verificationCaptchaHashes.put(web, imageHash);
             byte[] bytes =
                 android.util.Base64.decode(
                     data.substring(data.indexOf(',') + 1), android.util.Base64.DEFAULT);
@@ -825,6 +898,8 @@ public class UnifiedQueryPanel extends android.view.ContextThemeWrapper {
                           panel.removeAllViews();
                           codeButtons.remove(web);
                           codes.remove(web);
+                          autoCaptchaTexts.remove(web);
+                          verificationCaptchaHashes.remove(web);
                           captureVerification(web, status, name);
                         } else {
                           send.setEnabled(true);
@@ -832,10 +907,132 @@ public class UnifiedQueryPanel extends android.view.ContextThemeWrapper {
                         }
                       });
                 });
+            if (solve)
+              DdddOcrEngine.recognizeAsync(
+                  this,
+                  bitmap,
+                  result -> {
+                    if (result == null) ocrUnavailable = true;
+                    if (result == null
+                        || result.text.length() < 3
+                        || result.confidence < 0.5f) {
+                      scheduleUnreadableReload(web, code, status, name);
+                      return;
+                    }
+                    handler.post(
+                        () -> autoVerifyCaptcha(web, code, send, status, name, result.text));
+                  });
           } catch (Exception ignored) {
             status.setText(name + " · Verificación disponible en el formulario oficial");
           }
         });
+  }
+
+  /**
+   * A CAPTCHA that could not be passed is never retried on the same form. The source is reloaded
+   * from its original URL so a new session, a new form and a new image are requested, and the code
+   * is recognised and submitted again. After {@link #MAX_CAPTCHA_RELOADS} reloads the newest image
+   * stays in the panel for manual entry.
+   */
+  private void reloadSource(WebView web, TextView status, String name) {
+    if (isFinishing() || isDestroyed()) return;
+    if (priorityIndices.containsKey(web)) return;
+    String url = portalUrls.get(web);
+    int reloads = captchaReloads.getOrDefault(web, 0);
+    clearCaptchaState(web);
+    if (url != null && reloads < MAX_CAPTCHA_RELOADS) {
+      captchaReloads.put(web, reloads + 1);
+      status.setText(
+          "Verificación no superada · recargando "
+              + name
+              + " ("
+              + (reloads + 1)
+              + "/"
+              + MAX_CAPTCHA_RELOADS
+              + ")…");
+      web.stopLoading();
+      web.loadUrl(url);
+      return;
+    }
+    status.setText(name + " · Verifica el código de la imagen y pulsa Continuar");
+    captureVerification(web, status, name, false);
+  }
+
+  /** Discards the rejected code and the previous image so a fresh challenge is not confused. */
+  private void clearCaptchaState(WebView web) {
+    submitted.remove(web);
+    failed.remove(web);
+    resultAttempts.remove(web);
+    attempts.remove(web);
+    autoCaptchaAttempts.remove(web);
+    autoCaptchaTexts.remove(web);
+    verificationCaptchaHashes.remove(web);
+    codes.remove(web);
+    codeButtons.remove(web);
+    LinearLayout panel = verificationPanels.get(web);
+    if (panel != null) {
+      panel.removeAllViews();
+      panel.setVisibility(View.GONE);
+    }
+    web.evaluateJavascript("window.__autocarSubmitted=false", null);
+  }
+
+  /**
+   * When the OCR cannot read the image, a new one is requested instead of leaving the same
+   * unreadable challenge. Skipped when the user already typed a code or the query moved on.
+   */
+  private void scheduleUnreadableReload(
+      WebView web, android.widget.EditText code, TextView status, String name) {
+    if (ocrUnavailable) return;
+    handler.postDelayed(
+        () -> {
+          if (isFinishing() || isDestroyed() || submitted.contains(web)) return;
+          if (codes.get(web) != code || code.getText().toString().trim().length() > 0) return;
+          reloadSource(web, status, name);
+        },
+        2500);
+  }
+
+  private void autoVerifyCaptcha(
+      WebView web, android.widget.EditText code, Button send, TextView status, String name,
+      String recognized) {
+    if (isFinishing() || isDestroyed()) return;
+    if (codes.get(web) != code || codeButtons.get(web) != send || !code.isEnabled()) return;
+    String current = code.getText().toString().trim();
+    String previousAuto = autoCaptchaTexts.get(web);
+    boolean newCode = recognized != null && recognized.trim().length() >= 3;
+    // An empty field or one that still holds the previously recognised code is ours to update; a
+    // code typed or corrected by the user is never overwritten. Each new image therefore gets its
+    // own code instead of resubmitting the rejected one.
+    if (newCode && (current.isEmpty() || current.equals(previousAuto))) {
+      String value = recognized.trim();
+      if (!value.equals(current)) {
+        code.setText(value);
+        code.setSelection(code.length());
+      }
+      autoCaptchaTexts.put(web, value);
+      current = value;
+    }
+    int used = autoCaptchaAttempts.getOrDefault(web, 0);
+    if (used >= MAX_AUTO_CAPTCHA_ATTEMPTS) {
+      // The automatic attempts did not pass the verification: reload the source and try again with
+      // a fresh page instead of repeating the same rejected code.
+      reloadSource(web, status, name);
+      return;
+    }
+    if (!send.isEnabled() || current.isEmpty()) return;
+    autoCaptchaAttempts.put(web, used + 1);
+    status.setText(
+        "Verificando código automáticamente (" + (used + 1) + "/" + MAX_AUTO_CAPTCHA_ATTEMPTS + ")…");
+    handler.postDelayed(
+        () -> {
+          if (isFinishing() || isDestroyed()) return;
+          if (codes.get(web) != code || codeButtons.get(web) != send) return;
+          if (!code.isEnabled() || !send.isEnabled()) return;
+          if (code.getText().toString().trim().isEmpty()) return;
+          send.performClick();
+        },
+        700);
   }
 
   private void readResult(WebView web, TextView status, String name) {
@@ -925,10 +1122,10 @@ public class UnifiedQueryPanel extends android.view.ContextThemeWrapper {
               panel.setVisibility(View.GONE);
               codes.remove(web);
               codeButtons.remove(web);
+              autoCaptchaTexts.remove(web);
               web.evaluateJavascript("window.__autocarSubmitted=false", null);
-              status.setText("Código rechazado · vuelve a verificar");
-              fillAndConsult(
-                  web, PlateUtils.normalize(getIntent().getStringExtra("plate")), status, name);
+              status.setText("Código rechazado · recargando la fuente");
+              reloadSource(web, status, name);
               return;
             }
             String text = data.optString("text").trim();
@@ -1053,6 +1250,7 @@ public class UnifiedQueryPanel extends android.view.ContextThemeWrapper {
       priorityCaptchaHashes.put(web, hash);
       LinearLayout panel = verificationPanels.get(web);
       panel.removeAllViews();
+      autoCaptchaTexts.remove(web);
       android.graphics.Bitmap display =
           captcha.copy(android.graphics.Bitmap.Config.ARGB_8888, false);
       android.graphics.Bitmap previous = shownPriorityCaptchas.put(web, display);
@@ -1077,11 +1275,32 @@ public class UnifiedQueryPanel extends android.view.ContextThemeWrapper {
             if (answer.isEmpty()) return;
             priorityEngine.submit(index, answer);
             priorityCaptchaHashes.remove(web);
+            autoCaptchaTexts.remove(web);
             send.setEnabled(false);
             verificationCards.get(web).setVisibility(View.GONE);
             panel.setVisibility(View.GONE);
             status.setText("Validando código…");
             updateCounts();
+          });
+      DdddOcrEngine.recognizeAsync(
+          this,
+          captcha,
+          result -> {
+            if (result == null) ocrUnavailable = true;
+            if (result == null || result.text.length() < 3 || result.confidence < 0.5f) {
+              if (ocrUnavailable) return;
+              handler.postDelayed(
+                  () -> {
+                    if (isFinishing() || isDestroyed() || priorityEngine == null) return;
+                    if (priorityEngine.complete(index) || priorityEngine.error(index)) return;
+                    android.widget.EditText field = codes.get(web);
+                    if (field != null && field.getText().toString().trim().length() > 0) return;
+                    priorityEngine.retry(index);
+                  },
+                  2500);
+              return;
+            }
+            handler.post(() -> autoVerifyCaptcha(web, code, send, status, name, result.text));
           });
       panel.setVisibility(View.VISIBLE);
       verificationCards.get(web).setVisibility(View.VISIBLE);
@@ -1094,7 +1313,7 @@ public class UnifiedQueryPanel extends android.view.ContextThemeWrapper {
   private void readSunarp(WebView web, TextView status, String name) {
     if (readingImages.contains(web) || officialImages.containsKey(web)) return;
     web.evaluateJavascript(
-        "(function(){var"
+        "(function(){var t=(document.body&&document.body.innerText)||'';if(/captcha|error de|incorrect|inv[aá]lido/i.test(t))return 'ERROR:'+t.slice(0,160).replace(/\\n/g,' ');var"
             + " images=Array.from(document.querySelectorAll('img[src^=\"data:image\"]')).filter(function(i){return"
             + " i.complete&&i.naturalWidth>400&&i.naturalHeight>200&&i.src.length>50000&&!/captcha/i.test(i.id+'"
             + " '+i.alt)});images.sort(function(a,b){return b.src.length-a.src.length});return"
@@ -1104,6 +1323,11 @@ public class UnifiedQueryPanel extends android.view.ContextThemeWrapper {
           try {
             Object decoded = new org.json.JSONTokener(value).nextValue();
             String data = decoded instanceof String ? (String) decoded : "";
+            if (data.startsWith("ERROR:")) {
+              failed.add(web);
+              status.setText("SUNARP: " + data.substring(6).trim());
+              return;
+            }
             if (data.isEmpty()) {
               int tries = resultAttempts.getOrDefault(web, 0);
               if (tries < 30) {
@@ -1277,7 +1501,7 @@ public class UnifiedQueryPanel extends android.view.ContextThemeWrapper {
               + (pending > 0 ? " · " + pending + " por verificar" : "")
               + (finished == total ? " · Finalizado" : ""));
     resultTab.setText("Ver resultados");
-    verificationTab.setText("Verificar (" + pending + ")");
+    verificationTab.setText(pending == 1 ? "Ingresar código" : "Ingresar códigos (" + pending + ")");
     verificationTab.setVisibility(pending > 0 ? View.VISIBLE : View.GONE);
     sourceTab.setText("Fuentes");
     java.util.ArrayList<GeneralVehicleReport.Entry> entries = new java.util.ArrayList<>();
@@ -1296,6 +1520,10 @@ public class UnifiedQueryPanel extends android.view.ContextThemeWrapper {
       String text = GeneralVehicleReport.summary(queryPlate, entries);
       if (!text.equals(generalSummary.getText().toString())) generalSummary.setText(text);
     }
+    updateChatResultRows(entries);
+    latestFindings = GeneralVehicleReport.findings(entries);
+    if (chatFindings.getVisibility() == View.VISIBLE
+        && !latestFindings.contentEquals(chatFindings.getText())) chatFindings.setText(latestFindings);
     if (generalDetail != null) {
       String text = GeneralVehicleReport.detail(queryPlate, entries);
       if (!text.equals(generalDetail.getText().toString())) generalDetail.setText(text);
@@ -1377,6 +1605,40 @@ public class UnifiedQueryPanel extends android.view.ContextThemeWrapper {
         });
   }
 
+  void showFindings() {
+    chatFindings.setText(latestFindings);
+    chatFindings.setVisibility(View.VISIBLE);
+    chatFindings.post(() -> chatFindings.requestRectangleOnScreen(
+        new android.graphics.Rect(0, 0, chatFindings.getWidth(), dp(48)), false));
+  }
+
+  private void updateChatResultRows(java.util.List<GeneralVehicleReport.Entry> entries) {
+    if (chatResultRows == null) return;
+    // Keep the card compact; the full list remains in the detail and PDF.
+    int limit = Math.min(entries.size(), 4);
+    for (int i = 0; i < limit; i++) {
+      TextView row;
+      if (i < chatResultRows.getChildCount()) {
+        row = (TextView) chatResultRows.getChildAt(i);
+      } else {
+        row = new TextView(this);
+        row.setTextSize(13);
+        row.setTextColor(Color.rgb(30, 49, 70));
+        row.setPadding(0, dp(6), 0, dp(6));
+        row.setMaxLines(2);
+        row.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        chatResultRows.addView(row);
+      }
+      GeneralVehicleReport.Entry entry = entries.get(i);
+      String value = entry.status;
+      if (value.startsWith("Información recibida") && !entry.summary.isBlank()) {
+        value = entry.summary;
+      }
+      String text = entry.name + "  ·  " + value;
+      if (!text.contentEquals(row.getText())) row.setText(text);
+    }
+  }
+
   private void savePdf(boolean share) {
     if (isFinishing() || isDestroyed()) return;
     ArrayList<FinesPdfReport.Source> snapshot = new ArrayList<>();
@@ -1391,7 +1653,8 @@ public class UnifiedQueryPanel extends android.view.ContextThemeWrapper {
               sourceUrls[i],
               reportStatuses.get(i).getText().toString(),
               detail,
-              officialImages.get(portals.get(i))));
+              officialImages.get(portals.get(i)),
+              summaries.get(portals.get(i)).getText().toString()));
       signature =
           31 * signature
               + java.util.Objects.hash(

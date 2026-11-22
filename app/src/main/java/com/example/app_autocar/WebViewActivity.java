@@ -26,6 +26,7 @@ public class WebViewActivity extends AppCompatActivity {
   public static final String EXTRA_TITLE = "title";
   public static final String EXTRA_URL = "url";
   public static final String EXTRA_PLATE = "plate";
+  public static final String EXTRA_TRAFFIC_AUTOFILL = "traffic_autofill";
 
   private WebView webView;
   private ProgressBar progressBar;
@@ -96,11 +97,20 @@ public class WebViewActivity extends AppCompatActivity {
 
           @Override
           public void onPageFinished(WebView view, String url) {
+            if (AutoLoginAutomation.tryAutoLogin(view, url)) {
+              // Se envió el formulario de login; se espera la siguiente carga de página.
+              return;
+            }
+            if (getIntent().getBooleanExtra(EXTRA_TRAFFIC_AUTOFILL, false)) {
+              fillTrafficForm(view, url, plate);
+              return;
+            }
             if (initialUrl != null && initialUrl.contains("sat.gob.pe/VirtualSAT/principal.aspx")) {
               routeSatToFines();
             }
             injectPlateIfAvailable();
             injectSunarpIdentity(url);
+            injectSigueloIdentity(url);
           }
 
           @Override
@@ -145,6 +155,10 @@ public class WebViewActivity extends AppCompatActivity {
     }
   }
 
+  static void fillTrafficForm(WebView webView, String url, String plate) {
+    TrafficFormAutomation.fill(webView, url, plate);
+  }
+
   private void injectPlateIfAvailable() {
     if (plate.isEmpty()) return;
     String safePlate = plate.replace("\\", "\\\\").replace("'", "\\'");
@@ -181,26 +195,71 @@ public class WebViewActivity extends AppCompatActivity {
     String dni = org.json.JSONObject.quote(identity.getString("dni", ""));
     String date = org.json.JSONObject.quote(identity.getString("date", ""));
     String digit = org.json.JSONObject.quote(identity.getString("digit", ""));
+    String email = org.json.JSONObject.quote(identity.getString("email", ""));
     webView.evaluateJavascript(
         "(function(){if(window.__autocarIdentity)return;window.__autocarIdentity=true;var"
             + " tries=0,t=setInterval(function(){"
-            + "tries++;document.querySelectorAll('input').forEach(function(e){if(e.type==='hidden'||e.type==='checkbox')return;var"
+            + "tries++;"
+            + "var sel=document.querySelector('#docType,select[name=docType]');if(sel){var opt=Array.from(sel.options).find(function(o){return /dni/i.test(o.text||o.label||'');});if(opt){sel.value=opt.value;sel.dispatchEvent(new Event('change',{bubbles:true}));}}"
+            + "document.querySelectorAll('input').forEach(function(e){if(e.type==='hidden'||e.type==='checkbox'||e.type==='radio')return;var"
             + " labels=Array.from(e.labels||[]).map(function(l){return l.innerText}).join(' ');var"
             + " k=((e.id||'')+' '+(e.name||'')+' '+(e.placeholder||'')+'"
             + " '+(e.getAttribute('formcontrolname')||'')+'"
-            + " '+labels).toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g,'');var"
+            + " '+labels).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');var"
             + " v=null;if(/digito|verificador/.test(k))v="
             + digit
             + ";else if(/emision/.test(k)){v="
             + date
             + ";if(e.type==='date'){var"
             + " p=v.split('/');v=p[2]+'-'+p[1].padStart(2,'0')+'-'+p[0].padStart(2,'0');}}else"
-            + " if(/dni|numerodocumento|numero.*documento|nrodocumento/.test(k))v="
+            + " if(/dni|numerodocumento|numero.*documento|nrodocumento|documenttovalidate/.test(k))v="
             + dni
+            + ";else if(/correo|email/.test(k))v="
+            + email
             + ";if(v!==null&&!e.value){var"
             + " s=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set;s.call(e,v);e.dispatchEvent(new"
             + " Event('input',{bubbles:true}));e.dispatchEvent(new"
-            + " Event('change',{bubbles:true}));}});if(tries>=30)clearInterval(t);},600);})();",
+            + " Event('change',{bubbles:true}));}});"
+            + "var sendBtn=document.querySelector('#sendCodeButton,button[onclick*=sendEmail]');"
+            + "if(sendBtn&&!sendBtn.disabled&&!window.__autocarCodeSent){window.__autocarCodeSent=true;sendBtn.click();}"
+            + "var otp=document.querySelector('input[maxlength=\"6\"]');"
+            + "if(otp&&otp.value.length>=4&&!window.__autocarOtpSubmitted){var verifyBtn=document.querySelector('button[type=submit]:not(#sendCodeButton),#verifyButton,#kc-login');if(verifyBtn&&!verifyBtn.disabled){window.__autocarOtpSubmitted=true;verifyBtn.click();}}"
+            + "if(tries>=40)clearInterval(t);},700);})();",
+        null);
+  }
+
+  private void injectSigueloIdentity(String url) {
+    if (url == null || !"sigueloplus.sunarp.gob.pe".equals(Uri.parse(url).getHost())) return;
+    android.content.SharedPreferences identity =
+        getSharedPreferences("siguelo_identity", MODE_PRIVATE);
+    if (!identity.contains("numero")) return;
+    String oficina = org.json.JSONObject.quote(identity.getString("oficina", ""));
+    String anio = org.json.JSONObject.quote(identity.getString("anio", ""));
+    String numero = org.json.JSONObject.quote(identity.getString("numero", ""));
+    webView.evaluateJavascript(
+        "(function(){if(window.__autocarSiguelo)return;window.__autocarSiguelo=true;var"
+            + " tries=0,t=setInterval(function(){"
+            + "tries++;"
+            // Oficina registral select
+            + "var off=document.querySelector('select[ngModel],select');if(off&&!off.value){var opt=Array.from(off.options).find(function(o){return (o.text||'').toUpperCase().includes("
+            + oficina
+            + ".toUpperCase());});if(opt){off.value=opt.value;off.dispatchEvent(new Event('change',{bubbles:true}));}}"
+            // Año select
+            + "var an=document.querySelectorAll('select');Array.from(an).forEach(function(s){if(!s.value&&Array.from(s.options).some(function(o){return (o.text||'').includes("
+            + anio
+            + ");})){var o=Array.from(s.options).find(function(o){return (o.text||'').includes("
+            + anio
+            + ");});if(o){s.value=o.value;s.dispatchEvent(new Event('change',{bubbles:true}));}}});"
+            // Número de título input
+            + "document.querySelectorAll('input').forEach(function(e){if(e.type==='hidden')return;var"
+            + " k=((e.id||'')+' '+(e.name||'')+' '+(e.placeholder||'')).toLowerCase();if(/numero|titulo/.test(k)&&!e.value){var"
+            + " s=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set;s.call(e,"
+            + numero
+            + ");e.dispatchEvent(new Event('input',{bubbles:true}));e.dispatchEvent(new Event('change',{bubbles:true}));}});"
+            // Auto-enviar cuando Turnstile esté resuelto
+            + "var token=document.querySelector('[name=\"cf-turnstile-response\"]');"
+            + "if(token&&token.value&&token.value.length>10&&!window.__autocarSigueloSubmitted){var btn=Array.from(document.querySelectorAll('button')).find(function(b){return /buscar|consultar|verificar/i.test(b.innerText||b.value||'');});if(btn&&!btn.disabled){window.__autocarSigueloSubmitted=true;btn.click();}}"
+            + "if(tries>=60)clearInterval(t);},700);})();",
         null);
   }
 
@@ -222,6 +281,7 @@ public class WebViewActivity extends AppCompatActivity {
   @Override
   protected void onDestroy() {
     if (webView != null) {
+      TrafficFormAutomation.clear(webView);
       webView.stopLoading();
       webView.destroy();
     }

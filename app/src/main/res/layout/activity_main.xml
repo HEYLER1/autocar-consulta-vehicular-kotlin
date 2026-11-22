@@ -6,16 +6,22 @@
     android:layout_height="match_parent"
     android:background="@color/background"
     android:orientation="vertical">
-    <FrameLayout android:id="@+id/content_container" android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" />
-    <com.google.android.material.bottomnavigation.BottomNavigationView
-        android:id="@+id/bottom_navigation"
+    <com.google.android.material.tabs.TabLayout
+        android:id="@+id/top_navigation"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:minHeight="72dp"
-        android:background="@color/white"
-        android:elevation="0dp"
-        app:itemIconTint="@color/bottom_nav_colors"
-        app:itemTextColor="@color/bottom_nav_colors"
-        app:labelVisibilityMode="labeled"
-        app:menu="@menu/main_navigation" />
+        android:background="@color/background"
+        android:paddingStart="8dp"
+        android:paddingEnd="8dp"
+        app:tabMode="auto"
+        app:tabGravity="fill"
+        app:tabIndicatorColor="#176A56"
+        app:tabIndicatorFullWidth="false"
+        app:tabSelectedTextColor="#103C35"
+        app:tabTextColor="@color/text_secondary">
+        <com.google.android.material.tabs.TabItem android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Inicio" />
+        <com.google.android.material.tabs.TabItem android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Vehículo" />
+        <com.google.android.material.tabs.TabItem android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Seguros" />
+    </com.google.android.material.tabs.TabLayout>
+    <FrameLayout android:id="@+id/content_container" android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" />
 </LinearLayout>

@@ -14,7 +14,7 @@ import java.util.List;
 /** Snapshot of received data, never a certificate of absence of fines. */
 public final class FinesPdfReport {
   public static final class Source {
-    public final String name, url, status, detail;
+    public final String name, url, status, detail, summary;
     public final android.graphics.Bitmap image;
 
     public Source(String name, String url, String status, String detail) {
@@ -23,11 +23,30 @@ public final class FinesPdfReport {
 
     public Source(
         String name, String url, String status, String detail, android.graphics.Bitmap image) {
+      this(name, url, status, detail, image, "");
+    }
+
+    public Source(String name, String url, String status, String detail,
+        android.graphics.Bitmap image, String summary) {
       this.name = name;
       this.url = url;
       this.status = status;
       this.detail = detail;
       this.image = image;
+      this.summary = summary;
+    }
+
+    boolean hasEvidence() {
+      return status.startsWith("Información recibida")
+          && (!detail.trim().isEmpty() || (image != null && !image.isRecycled()));
+    }
+
+    int topic() {
+      String host = FinesPortalAdapter.host(url);
+      if (host.equals("consultavehicular.sunarp.gob.pe")) return 0;
+      if (host.equals("servicios.sbs.gob.pe")) return 1;
+      if (host.equals("rec.mtc.gob.pe") || host.equals("portal.mtc.gob.pe")) return 2;
+      return 3;
     }
   }
 
@@ -40,40 +59,35 @@ public final class FinesPdfReport {
     File file =
         new File(
             folder,
-            "Multas_" + PlateUtils.normalize(plate) + "_" + System.currentTimeMillis() + ".pdf");
+            "AUTOCAR_" + PlateUtils.normalize(plate) + "_" + System.currentTimeMillis() + ".pdf");
     java.text.SimpleDateFormat format =
         new java.text.SimpleDateFormat("dd/MM/yyyy HH:mm:ss", java.util.Locale.ROOT);
     format.setTimeZone(java.util.TimeZone.getTimeZone("America/Lima"));
     String date = format.format(new java.util.Date());
     int received = 0;
-    for (Source source : sources) if (!source.detail.trim().isEmpty()) received++;
+    for (Source source : sources) if (source.hasEvidence()) received++;
     Layout layout = new Layout(PlateUtils.display(plate), date);
     try {
-      layout.line("INFORME VEHICULAR", 16, true, Color.rgb(0, 43, 92));
-      layout.line(
-          received + " / " + sources.size() + " fuentes con información extraída",
-          12,
-          true,
-          Color.rgb(0, 43, 92));
-      layout.line(
-          received < sources.size()
-              ? "INFORME PARCIAL - Hay fuentes pendientes o no verificadas."
-              : "Datos recibidos - Verifica su exactitud en las fuentes oficiales.",
-          11,
-          false,
-          Color.rgb(120, 70, 0));
-      layout.line(
-          "Este documento resume la consulta desde AUTOCAR. No acredita ausencia de multas ni"
-              + " reemplaza certificados oficiales. Los errores y captchas pendientes no equivalen"
-              + " a cero deudas.",
-          10,
-          false,
-          Color.DKGRAY);
-      for (Source source : sources) {
+      String[] topics = {"Registro vehicular", "Seguro y siniestros", "Revisión técnica", "Multas e infracciones"};
+      layout.cover(sources, received, topics);
+      layout.finishPage();
+      layout.newPage();
+      layout.line("Detalle y evidencia por fuente", 21, true, Color.rgb(0, 43, 92));
+      for (int topic = 0; topic < topics.length; topic++) {
+        boolean showHeading = true;
+        for (Source source : sources) {
+        if (source.topic() != topic) continue;
+        if (showHeading) {
+          layout.ensure(130);
+          layout.y += 12;
+          layout.line(topics[topic], 13, true, Color.rgb(0, 43, 92));
+          showHeading = false;
+        }
         layout.ensure(100);
         layout.y += 14;
         layout.line(source.name, 14, true, Color.rgb(0, 43, 92));
-        layout.line("Estado: " + source.status, 10, true, Color.DKGRAY);
+        layout.line((source.hasEvidence() ? "Estado: " : "Sin verificar: ") + source.status,
+            10, true, Color.DKGRAY);
         layout.line(
             source.detail.trim().isEmpty()
                 ? "Sin información extraída. Completa la verificación o revisa el portal oficial."
@@ -94,6 +108,7 @@ public final class FinesPdfReport {
                   36, layout.y, 36 + source.image.getWidth() * scale, layout.y + height),
               null);
           layout.y += height + 12;
+        }
         }
       }
       layout.ensure(55);
@@ -145,7 +160,7 @@ public final class FinesPdfReport {
       canvas.drawText("PLACA  " + plate, 36, 60, header);
       header.setTextSize(9);
       header.setTypeface(Typeface.DEFAULT);
-      canvas.drawText("Consulta: " + date + " (America/Lima)", 36, 78, header);
+      canvas.drawText("Informe generado: " + date + " (hora de Perú)", 36, 78, header);
       y = 120;
     }
 
@@ -154,6 +169,80 @@ public final class FinesPdfReport {
         finishPage();
         newPage();
       }
+    }
+
+    private static final int INK = 0xff10253b, TEAL = 0xff00695f, MUTED = 0xff495d70;
+
+    void block(float x, float y, float w, float h, int color) {
+      paint.setColor(color);
+      canvas.drawRoundRect(x, y, x + w, y + h, 12, 12, paint);
+    }
+
+    void label(String text, float x, float baseline, int size, boolean bold, int color) {
+      paint.setTypeface(bold ? Typeface.DEFAULT_BOLD : Typeface.DEFAULT);
+      paint.setTextSize(size);
+      paint.setColor(color);
+      canvas.drawText(text, x, baseline, paint);
+    }
+
+    void paragraph(String text, float x, float top, int width, int size, int lines, int color) {
+      android.text.TextPaint brush = new android.text.TextPaint(Paint.ANTI_ALIAS_FLAG);
+      brush.setTextSize(size);
+      brush.setColor(color);
+      android.text.StaticLayout paragraph = android.text.StaticLayout.Builder
+          .obtain(text, 0, text.length(), brush, width)
+          .setMaxLines(lines).setEllipsize(android.text.TextUtils.TruncateAt.END)
+          .setIncludePad(false).setLineSpacing(3, 1).build();
+      canvas.save();
+      canvas.translate(x, top);
+      paragraph.draw(canvas);
+      canvas.restore();
+    }
+
+    void cover(List<Source> sources, int received, String[] topics) {
+      canvas.drawColor(0xfff1f5f7);
+      block(24, 24, 547, 198, INK);
+      label("AUTOCAR  /  INFORME VEHICULAR", 44, 57, 13, true, 0xff8de0cd);
+      label("Antes de comprar", 44, 104, 38, true, Color.WHITE);
+      block(44, 125, 205, 54, 0xffffdc65);
+      label(plate, 60, 162, 29, true, INK);
+      label("Generado: " + date + " (Perú)", 44, 202, 10, false, 0xffd6e5ee);
+
+      String[] metrics = {"Fuentes seleccionadas", "Con evidencia", "Sin verificar"};
+      int[] counts = {sources.size(), received, sources.size() - received};
+      for (int i = 0; i < metrics.length; i++) {
+        int x = 24 + 185 * i;
+        block(x, 240, 177, 70, Color.WHITE);
+        label(Integer.toString(counts[i]), x + 15, 276, 28, true, i == 2 ? 0xff984800 : TEAL);
+        label(metrics[i], x + 15, 295, 10, false, MUTED);
+      }
+      label("Resumen por tema", 26, 345, 21, true, INK);
+      for (int i = 0; i < topics.length; i++) {
+        int x = 24 + (i % 2) * 279, top = 363 + (i / 2) * 139;
+        block(x, top, 268, 127, Color.WHITE);
+        label("0" + (i + 1), x + 15, top + 24, 10, true, TEAL);
+        label(topics[i], x + 38, top + 25, 14, true, INK);
+        int total = 0, verified = 0;
+        String brief = "";
+        for (Source source : sources) {
+          if (source.topic() != i) continue;
+          total++;
+          if (!source.hasEvidence()) continue;
+          verified++;
+          if (brief.isEmpty() && !source.summary.isBlank())
+            brief = source.name + ": " + source.summary.replaceAll("\\s+", " ").trim();
+        }
+        label(total == 0 ? "No consultado" : verified + " con evidencia  /  " + (total - verified)
+            + " sin verificar", x + 15, top + 49, 10, true, TEAL);
+        paragraph(brief.isEmpty() ? (verified == 0 ? "No hay evidencia de este tema en la consulta."
+            : "Consulta el detalle y los importes disponibles en el anexo.") : brief,
+            x + 15, top + 63, 238, 11, 4, MUTED);
+      }
+      block(24, 648, 547, 126, 0xfffff1d9);
+      label("Lo que este informe no confirma", 41, 676, 14, true, 0xff783d05);
+      paragraph("Una fuente sin verificar no equivale a cero multas ni confirma vigencias. "
+          + "Las consultas manuales (gravámenes, captura, impuesto, lunas y GNV) no están incluidas. "
+          + "Revisa el anexo y los documentos oficiales antes de pagar.", 41, 691, 507, 11, 5, INK);
     }
 
     void finishPage() {
